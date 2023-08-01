@@ -1,7 +1,7 @@
+use kanidm_utils_users::get_user_name_by_uid;
 use std::ffi::CString;
 use std::path::Path;
 use std::process::Command;
-use users::get_user_by_uid;
 
 use selinux::{
     current_mode, kernel_support, label::back_end::File, label::Labeler, KernelSupport,
@@ -63,8 +63,8 @@ impl SelinuxLabeler {
         // so that relabels in the future do not break it.
         #[cfg(all(target_family = "unix", feature = "selinux"))]
         // Yes, gid, because we use the GID number for both the user's UID and primary GID
-        let sel_lookup_path_raw = match get_user_by_uid(gid) {
-            Some(v) => format!("{}{}", home_prefix, v.name().to_str().unwrap()),
+        let sel_lookup_path_raw = match get_user_name_by_uid(gid) {
+            Some(v) => format!("{}{}", home_prefix, v.to_str().unwrap()),
             None => {
                 return Err("Failed looking up username by uid for SELinux relabeling".to_string());
             }
