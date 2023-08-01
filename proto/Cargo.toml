@@ -22,6 +22,7 @@ num_enum = { workspace = true }
 scim_proto = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+serde_with = "3.1.0"
 time = { workspace = true, features = ["serde", "std"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }

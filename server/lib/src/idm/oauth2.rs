@@ -4762,4 +4762,18 @@ mod tests {
 
         // Success!
     }
+    #[test] // I know this looks kinda dumb but at some point someone pointed out that our scope syntax wasn't compliant with rfc6749
+            //(https://datatracker.ietf.org/doc/html/rfc6749#section-3.3), so I'm just making sure that we don't break it again.
+    fn compliant_serialization_test() {
+        let token_req: Result<AccessTokenRequest, serde_json::Error> = serde_json::from_str(
+            r#"
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": "some_dumb_refresh_token",
+                "scope": "invalid_scope vasd asd"
+            }
+        "#,
+        );
+        assert!(token_req.is_ok());
+    }
 }

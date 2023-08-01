@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
+use serde_with::formats::SpaceSeparator;
+use serde_with::{serde_as, skip_serializing_none, StringWithSeparator};
 use url::Url;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
@@ -77,6 +79,9 @@ pub enum AuthorisationResponse {
     Permitted,
 }
 
+#[serde_as]
+#[skip_serializing_none]
+// this is the equivalent of serde(skip_serializing_if = "Option::is_none") applied to ALL the options
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "grant_type", rename_all = "snake_case")]
 pub enum GrantTypeReq {
@@ -85,12 +90,11 @@ pub enum GrantTypeReq {
         code: String,
         // Must be the same as the original redirect uri.
         redirect_uri: Url,
-        #[serde(skip_serializing_if = "Option::is_none")]
         code_verifier: Option<String>,
     },
     RefreshToken {
         refresh_token: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde_as(as = "Option<StringWithSeparator::<SpaceSeparator, String>>")]
         scope: Option<BTreeSet<String>>,
     },
 }
