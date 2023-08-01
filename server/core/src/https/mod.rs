@@ -207,7 +207,6 @@ pub async fn create_https_server(
         }
         ServerRole::WriteReplicaNoUI => Router::new(),
     };
-
     let app = Router::new()
         .route("/robots.txt", get(robots_txt))
         .route("/status", get(status))
@@ -226,7 +225,10 @@ pub async fn create_https_server(
                 );
                 std::process::exit(1);
             }
-            app.nest_service("/pkg", ServeDir::new(pkg_path))
+            let pkg_router = Router::new()
+                .nest_service("/pkg", ServeDir::new(pkg_path).precompressed_br())
+                .layer(middleware::compression::new());
+            app.merge(pkg_router)
         }
     };
 
