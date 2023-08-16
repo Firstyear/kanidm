@@ -25,6 +25,7 @@ RUN \
         sccache \
         cargo \
         clang \
+        gawk \
         make automake autoconf \
         libopenssl-3-devel pam-devel \
         sqlite3-devel \
