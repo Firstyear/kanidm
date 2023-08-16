@@ -477,7 +477,7 @@ pub async fn service_account_id_delete(
     Path(id): Path<String>,
     Extension(kopid): Extension<KOpId>,
 ) -> impl IntoResponse {
-    let filter = filter_all!(f_eq("class", PartialValue::new_class("service_accont")));
+    let filter = filter_all!(f_eq("class", PartialValue::new_class("service_account")));
     json_rest_event_delete_id(state, id, filter, kopid).await
 }
 

@@ -163,7 +163,7 @@ impl<'a> QueryServerWriteTransaction<'a> {
         self.delete(&de)
     }
 
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(self))]
     pub fn internal_delete_uuid_if_exists(
         &mut self,
         target_uuid: Uuid,

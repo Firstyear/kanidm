@@ -1902,6 +1902,9 @@ impl<STATE> Entry<EntryValid, STATE> {
             return Ok(());
         };
 
+        // Are we in the recycle bin? We soften some checks if we are.
+        let recycled = self.attribute_equality("class", &PVCLASS_RECYCLED);
+
         // Do we have extensible? We still validate syntax of attrs but don't
         // check for valid object structures.
         let extensible = self.attribute_equality("class", &PVCLASS_EXTENSIBLE);
@@ -2023,7 +2026,14 @@ impl<STATE> Entry<EntryValid, STATE> {
                 "Validation error, the following required (must) attributes are missing - {:?}",
                 missing_must
             );
-            return Err(SchemaError::MissingMustAttribute(missing_must));
+            // We if are in the recycle bin, we don't hard error here. This can occur when
+            // a migration occurs and we delete an acp, and then the related group. Because
+            // this would trigger refint which purges the acp_receiver_group, then this
+            // must value becomes unsatisfiable. So here we soften the check for recycled
+            // entries because they are in a "nebulous" state anyway.
+            if !recycled {
+                return Err(SchemaError::MissingMustAttribute(missing_must));
+            }
         }
 
         if extensible {
