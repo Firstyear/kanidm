@@ -81,12 +81,12 @@ pub async fn call_daemon(
     req: ClientRequest,
     timeout: u64,
 ) -> Result<ClientResponse, Box<dyn Error>> {
-    let sleep = time::sleep(Duration::from_millis(timeout));
+    let sleep = time::sleep(Duration::from_secs(timeout));
     tokio::pin!(sleep);
 
     tokio::select! {
         _ = &mut sleep => {
-            error!("Timed out making request to kanidm_unixd");
+            error!(?timeout, "Timed out making request to kanidm_unixd");
             Err(Box::new(IoError::new(ErrorKind::Other, "timeout")))
         }
         res = call_daemon_inner(path, req) => {
