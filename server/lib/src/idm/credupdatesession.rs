@@ -26,7 +26,11 @@ use crate::utils::{backup_code_from_random, readable_password_from_random, uuid_
 use crate::value::{CredUpdateSessionPerms, IntentTokenState};
 
 const MAXIMUM_CRED_UPDATE_TTL: Duration = Duration::from_secs(900);
+// Default 1 hour.
+const DEFAULT_INTENT_TTL: Duration = Duration::from_secs(3600);
+// Default 1 day.
 const MAXIMUM_INTENT_TTL: Duration = Duration::from_secs(86400);
+// Minimum 5 minutes.
 const MINIMUM_INTENT_TTL: Duration = Duration::from_secs(300);
 
 #[derive(Debug)]
@@ -552,29 +556,15 @@ impl<'a> IdmServerProxyWriteTransaction<'a> {
 
         // ==== AUTHORISATION CHECKED ===
 
-        // Build the intent token.
-        let mttl = event.max_ttl.unwrap_or_else(|| Duration::new(0, 0));
-        let max_ttl = ct + mttl.clamp(MINIMUM_INTENT_TTL, MAXIMUM_INTENT_TTL);
-        // let sessionid = uuid_from_duration(max_ttl, self.sid);
+        // Build the intent token. Previously this was using 0 and then
+        // relying on clamp to raise this to 5 minutes, but that led to
+        // rapid timeouts that affected some users.
+        let mttl = event.max_ttl.unwrap_or(DEFAULT_INTENT_TTL);
+        let clamped_mttl = mttl.clamp(MINIMUM_INTENT_TTL, MAXIMUM_INTENT_TTL);
+        debug!(?clamped_mttl, "clamped update intent validity");
+        let max_ttl = ct + clamped_mttl;
+
         let intent_id = readable_password_from_random();
-
-        /*
-        let token = CredentialUpdateIntentTokenInner {
-            sessionid,
-            target,
-            intent_id,
-            max_ttl,
-        };
-
-        let token_data = serde_json::to_vec(&token).map_err(|e| {
-            admin_error!(err = ?e, "Unable to encode token data");
-            OperationError::SerdeJsonError
-        })?;
-
-        let token_enc = self
-            .token_enc_key
-            .encrypt_at_time(&token_data, ct.as_secs());
-        */
 
         // Mark that we have created an intent token on the user.
         // ⚠️   -- remember, there is a risk, very low, but still a risk of collision of the intent_id.
