@@ -76,6 +76,9 @@ permissions. All binds have the permissions of "anonymous" even if the anonymous
 The exception is service accounts which can use api-tokens during an LDAP bind for elevated read
 permissions.
 
+The ability to bind with the POSIX password can be disabled to prevent password bruteforce attempts.
+This does not prevent api-token binds.
+
 ### Filtering Objects
 
 It is recommended that client applications filter accounts that can authenticate with
@@ -182,6 +185,16 @@ these components and must only contain alphanumeric characters.
 
 After the basedn is changed, the new value will take effect after a server restart. If you have a
 replicated topology, you must restart all servers.
+
+## Disable POSIX Password Binds
+
+If you do not have applications that require LDAP password binds, then you should disable this
+function to limit access.
+
+```
+kanidm system domain set-ldap-allow-unix-password-bind [true|false]
+kanidm system domain set-ldap-allow-unix-password-bind -D admin false
+```
 
 ## Examples
 

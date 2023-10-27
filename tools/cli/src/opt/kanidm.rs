@@ -870,6 +870,14 @@ pub enum DomainOpt {
         #[clap(name = "new-basedn")]
         new_basedn: String,
     },
+    /// Enable or disable unix passwords being used to bind via LDAP. Unless you have a specific
+    /// requirement for this, you should disable this.
+    SetLdapAllowUnixPasswordBind {
+        #[clap(flatten)]
+        copt: CommonOpt,
+        #[clap(name = "allow", action = clap::ArgAction::Set)]
+        enable: bool,
+    },
     #[clap(name = "show")]
     /// Show information about this system's domain
     Show(CommonOpt),

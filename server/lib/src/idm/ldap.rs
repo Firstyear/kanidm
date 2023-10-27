@@ -665,7 +665,7 @@ mod tests {
         let mut idms_prox_write = idms.proxy_write(duration_from_epoch_now()).await;
         let disallow_unix_pw_flag = ModifyEvent::new_internal_invalid(
             filter!(f_eq(Attribute::Uuid, PartialValue::Uuid(UUID_DOMAIN_INFO))),
-            ModifyList::new_purge_and_set(Attribute::DomainLdapAllowUnixPwBind, Value::Bool(false)),
+            ModifyList::new_purge_and_set(Attribute::LdapAllowUnixPwBind, Value::Bool(false)),
         );
         assert!(idms_prox_write
             .qs_write
@@ -684,7 +684,7 @@ mod tests {
         let mut idms_prox_write = idms.proxy_write(duration_from_epoch_now()).await;
         let allow_unix_pw_flag = ModifyEvent::new_internal_invalid(
             filter!(f_eq(Attribute::Uuid, PartialValue::Uuid(UUID_DOMAIN_INFO))),
-            ModifyList::new_purge_and_set(Attribute::DomainLdapAllowUnixPwBind, Value::Bool(true)),
+            ModifyList::new_purge_and_set(Attribute::LdapAllowUnixPwBind, Value::Bool(true)),
         );
         assert!(idms_prox_write.qs_write.modify(&allow_unix_pw_flag).is_ok());
         assert!(idms_prox_write.commit().is_ok());

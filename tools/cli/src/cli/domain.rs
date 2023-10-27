@@ -5,7 +5,8 @@ impl DomainOpt {
     pub fn debug(&self) -> bool {
         match self {
             DomainOpt::SetDisplayName(copt) => copt.copt.debug,
-            DomainOpt::SetLdapBasedn { copt, .. } => copt.debug,
+            DomainOpt::SetLdapBasedn { copt, .. }
+            | DomainOpt::SetLdapAllowUnixPasswordBind { copt, .. } => copt.debug,
             DomainOpt::Show(copt) | DomainOpt::ResetTokenKey(copt) => copt.debug,
         }
     }
@@ -33,6 +34,13 @@ impl DomainOpt {
                 );
                 let client = copt.to_client(OpType::Write).await;
                 match client.idm_domain_set_ldap_basedn(new_basedn).await {
+                    Ok(_) => println!("Success"),
+                    Err(e) => handle_client_error(e, &copt.output_mode),
+                }
+            }
+            DomainOpt::SetLdapAllowUnixPasswordBind { copt, enable } => {
+                let client = copt.to_client(OpType::Write).await;
+                match client.idm_set_ldap_allow_unix_password_bind(*enable).await {
                     Ok(_) => println!("Success"),
                     Err(e) => handle_client_error(e, &copt.output_mode),
                 }

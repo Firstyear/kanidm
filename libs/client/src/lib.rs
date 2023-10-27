@@ -1831,6 +1831,14 @@ impl KanidmClient {
         .await
     }
 
+    pub async fn idm_set_ldap_allow_unix_password_bind(
+        &self,
+        enable: bool,
+    ) -> Result<(), ClientError> {
+        self.perform_put_request("/v1/domain/_attr/ldap_allow_unix_pw_bind", vec![enable])
+            .await
+    }
+
     pub async fn idm_domain_get_ssid(&self) -> Result<String, ClientError> {
         self.perform_get_request("/v1/domain/_attr/domain_ssid")
             .await

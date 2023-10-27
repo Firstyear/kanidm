@@ -1395,6 +1395,7 @@ lazy_static! {
             Attribute::Es256PrivateKeyDer,
             Attribute::FernetPrivateKeyStr,
             Attribute::CookiePrivateKey,
+            Attribute::LdapAllowUnixPwBind,
         ],
         modify_removed_attrs: vec![
             Attribute::DomainDisplayName,
@@ -1403,12 +1404,13 @@ lazy_static! {
             Attribute::Es256PrivateKeyDer,
             Attribute::CookiePrivateKey,
             Attribute::FernetPrivateKeyStr,
+            Attribute::LdapAllowUnixPwBind,
         ],
         modify_present_attrs: vec![
             Attribute::DomainDisplayName,
             Attribute::DomainLdapBasedn,
             Attribute::DomainSsid,
-
+            Attribute::LdapAllowUnixPwBind,
         ],
         ..Default::default()
     };
