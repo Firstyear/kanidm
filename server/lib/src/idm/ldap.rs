@@ -644,7 +644,7 @@ mod tests {
 
         assert!(idms_prox_write.set_unix_account_password(&pce).is_ok());
         assert!(idms_prox_write.commit().is_ok()); // Committing all configs
-                                                   
+
         // default UNIX_PW bind (default is set to true)
         // Hence allows all unix binds
         let admin_t = ldaps
