@@ -565,6 +565,7 @@ impl<'a> QueryServerWriteTransaction<'a> {
             SCHEMA_ATTR_DOMAIN_DISPLAY_NAME.clone().into(),
             SCHEMA_ATTR_DOMAIN_LDAP_BASEDN.clone().into(),
             SCHEMA_ATTR_DOMAIN_NAME.clone().into(),
+            SCHEMA_ATTR_DOMAIN_LDAP_ALLOW_UNIX_PW_BIND.clone().into(),
             SCHEMA_ATTR_DOMAIN_SSID.clone().into(),
             SCHEMA_ATTR_DOMAIN_TOKEN_KEY.clone().into(),
             SCHEMA_ATTR_DOMAIN_UUID.clone().into(),

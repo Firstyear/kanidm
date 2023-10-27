@@ -63,6 +63,7 @@ pub const ATTR_DN: &str = "dn";
 pub const ATTR_DOMAIN_DISPLAY_NAME: &str = "domain_display_name";
 pub const ATTR_DOMAIN_LDAP_BASEDN: &str = "domain_ldap_basedn";
 pub const ATTR_DOMAIN_NAME: &str = "domain_name";
+pub const ATTR_DOMAIN_LDAP_ALLOW_UNIX_PW_BIND : &str = "domain_ldap_allow_unix_pw_bind";
 pub const ATTR_DOMAIN_SSID: &str = "domain_ssid";
 pub const ATTR_DOMAIN_TOKEN_KEY: &str = "domain_token_key";
 pub const ATTR_DOMAIN_UUID: &str = "domain_uuid";

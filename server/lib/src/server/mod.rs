@@ -65,6 +65,7 @@ pub struct DomainInfo {
     pub(crate) d_name: String,
     pub(crate) d_display: String,
     pub(crate) d_vers: DomainVersion,
+    pub(crate) d_ldap_allow_unix_pw_bind: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -813,7 +814,13 @@ pub trait QueryServerTransaction<'a> {
                 e
             })
     }
-
+    fn get_domain_ldap_allow_unix_pw_bind(&mut self) -> Result<bool, OperationError> {
+        self.internal_search_uuid(UUID_DOMAIN_INFO).map(|entry| {
+            entry
+                .get_ava_single_bool(Attribute::DomainLdapAllowUnixPwBind)
+                .unwrap_or(true)
+        })
+    }
     fn get_domain_cookie_key(&mut self) -> Result<[u8; 64], OperationError> {
         self.internal_search_uuid(UUID_DOMAIN_INFO)
             .and_then(|e| {
@@ -1130,6 +1137,7 @@ impl QueryServer {
             // we set the domain_display_name to the configuration file's domain_name
             // here because the database is not started, so we cannot pull it from there.
             d_display: domain_name,
+            d_ldap_allow_unix_pw_bind: false,
         }));
 
         // These default to empty, but they'll be populated shortly.
@@ -1563,8 +1571,16 @@ impl<'a> QueryServerWriteTransaction<'a> {
     pub(crate) fn reload_domain_info(&mut self) -> Result<(), OperationError> {
         let domain_name = self.get_db_domain_name()?;
         let display_name = self.get_db_domain_display_name()?;
+        let domain_ldap_allow_unix_pw_bind = match self.get_domain_ldap_allow_unix_pw_bind() {
+            Ok(v) => v,
+            _ => {
+                admin_warn!("Defaulting ldap_allow_unix_pw_bind to true");
+                true
+            }
+        };
         let domain_uuid = self.be_txn.get_db_d_uuid()?;
         let mut_d_info = self.d_info.get_mut();
+        mut_d_info.d_ldap_allow_unix_pw_bind = domain_ldap_allow_unix_pw_bind;
         if mut_d_info.d_uuid != domain_uuid {
             admin_warn!(
                 "Using domain uuid from the database {} - was {} in memory",

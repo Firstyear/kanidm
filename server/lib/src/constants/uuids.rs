@@ -243,6 +243,9 @@ pub const UUID_SCHEMA_ATTR_IMAGE: Uuid = uuid!("00000000-0000-0000-0000-ffff0000
 pub const UUID_SCHEMA_ATTR_DENIED_NAME: Uuid = uuid!("00000000-0000-0000-0000-ffff00000144");
 
 // Leave 145 for ldap unix pw bind
+pub const UUID_SCHEMA_ATTR_DOMAIN_LDAP_ALLOW_UNIX_PW_BIND: Uuid =
+    uuid!("00000000-0000-0000-0000-ffff00000145");
+
 pub const UUID_SCHEMA_CLASS_ACCOUNT_POLICY: Uuid = uuid!("00000000-0000-0000-0000-ffff00000146");
 
 // System and domain infos
