@@ -88,6 +88,7 @@ cargo install cargo-machete
 
 ### Cargo publish
 
+- [ ] publish `scim_proto`
 - [ ] publish `kanidm_proto`
 - [ ] publish `sketching`
 - [ ] publish `kanidm_utils_users`

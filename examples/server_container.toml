@@ -79,7 +79,9 @@ domain = "idm.example.com"
 #   domain name you configure above. If these two items are
 #   not consistent, the server WILL refuse to start!
 #   origin = "https://idm.example.com"
-origin = "https://idm.example.com:8443"
+#   origin = "https://idm.example.com:8443"
+origin = "https://idm.example.com"
+
 #
 [online_backup]
 #   The path to the output folder for online backups
