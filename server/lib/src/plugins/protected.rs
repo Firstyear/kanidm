@@ -37,8 +37,9 @@ lazy_static! {
         Attribute::Image,
         // modification of account policy values for dyngroup.
         Attribute::AuthSessionExpiry,
-        Attribute::PrivilegeExpiry,
+        Attribute::AuthPasswordMinimumLength,
         Attribute::CredentialTypeMinimum,
+        Attribute::PrivilegeExpiry,
         Attribute::WebauthnAttestationCaList,
         ];
 
