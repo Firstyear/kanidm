@@ -10,7 +10,6 @@ use axum::http::Uri;
 use axum::response::{ErrorResponse, IntoResponse, Response};
 use axum::Extension;
 use axum_htmx::{HxPushUrl, HxRequest};
-use futures_util::TryFutureExt;
 use kanidm_proto::attribute::Attribute;
 use kanidm_proto::internal::OperationError;
 use kanidm_proto::scim_v1::client::ScimFilter;
@@ -138,8 +137,8 @@ async fn get_person_info(
                 ext_access_check: true,
             },
         )
-        .map_err(|op_err| HtmxError::new(kopid, op_err, domain_info.clone()))
-        .await?;
+        .await
+        .map_err(|op_err| HtmxError::new(kopid, op_err, domain_info.clone()))?;
 
     if let Some(personinfo_info) = scimentry_into_personinfo(scim_entry) {
         Ok(personinfo_info)
@@ -167,8 +166,8 @@ async fn get_persons_info(
                 ext_access_check: true,
             },
         )
-        .map_err(|op_err| HtmxError::new(kopid, op_err, domain_info.clone()))
-        .await?;
+        .await
+        .map_err(|op_err| HtmxError::new(kopid, op_err, domain_info.clone()))?;
 
     // TODO: inefficient to sort here
     let mut persons: Vec<_> = base
