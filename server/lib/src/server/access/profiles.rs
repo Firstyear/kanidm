@@ -266,9 +266,10 @@ pub struct AccessControlModifyResolved<'a> {
 #[derive(Debug, Clone)]
 pub struct AccessControlModify {
     pub acp: AccessControlProfile,
-    pub classes: Vec<AttrString>,
     pub presattrs: Vec<Attribute>,
     pub remattrs: Vec<Attribute>,
+    pub pres_classes: Vec<AttrString>,
+    pub rem_classes: Vec<AttrString>,
 }
 
 impl AccessControlModify {
@@ -293,14 +294,25 @@ impl AccessControlModify {
             .map(|i| i.map(Attribute::from).collect())
             .unwrap_or_default();
 
-        let classes = value
+        let classes: Vec<AttrString> = value
             .get_ava_iter_iutf8(Attribute::AcpModifyClass)
             .map(|i| i.map(AttrString::from).collect())
             .unwrap_or_default();
 
+        let pres_classes = value
+            .get_ava_iter_iutf8(Attribute::AcpModifyPresentClass)
+            .map(|i| i.map(AttrString::from).collect())
+            .unwrap_or_else(|| classes.clone());
+
+        let rem_classes = value
+            .get_ava_iter_iutf8(Attribute::AcpModifyRemoveClass)
+            .map(|i| i.map(AttrString::from).collect())
+            .unwrap_or_else(|| classes);
+
         Ok(AccessControlModify {
             acp: AccessControlProfile::try_from(qs, value)?,
-            classes,
+            pres_classes,
+            rem_classes,
             presattrs,
             remattrs,
         })
@@ -316,7 +328,8 @@ impl AccessControlModify {
         targetscope: Filter<FilterValid>,
         presattrs: &str,
         remattrs: &str,
-        classes: &str,
+        pres_classes: &str,
+        rem_classes: &str,
     ) -> Self {
         AccessControlModify {
             acp: AccessControlProfile {
@@ -325,7 +338,14 @@ impl AccessControlModify {
                 receiver: AccessControlReceiver::Group(btreeset!(receiver)),
                 target: AccessControlTarget::Scope(targetscope),
             },
-            classes: classes.split_whitespace().map(AttrString::from).collect(),
+            pres_classes: pres_classes
+                .split_whitespace()
+                .map(AttrString::from)
+                .collect(),
+            rem_classes: rem_classes
+                .split_whitespace()
+                .map(AttrString::from)
+                .collect(),
             presattrs: presattrs.split_whitespace().map(Attribute::from).collect(),
             remattrs: remattrs.split_whitespace().map(Attribute::from).collect(),
         }
@@ -340,7 +360,8 @@ impl AccessControlModify {
         target: AccessControlTarget,
         presattrs: &str,
         remattrs: &str,
-        classes: &str,
+        pres_classes: &str,
+        rem_classes: &str,
     ) -> Self {
         AccessControlModify {
             acp: AccessControlProfile {
@@ -349,7 +370,14 @@ impl AccessControlModify {
                 receiver: AccessControlReceiver::EntryManager,
                 target,
             },
-            classes: classes.split_whitespace().map(AttrString::from).collect(),
+            pres_classes: pres_classes
+                .split_whitespace()
+                .map(AttrString::from)
+                .collect(),
+            rem_classes: rem_classes
+                .split_whitespace()
+                .map(AttrString::from)
+                .collect(),
             presattrs: presattrs.split_whitespace().map(Attribute::from).collect(),
             remattrs: remattrs.split_whitespace().map(Attribute::from).collect(),
         }

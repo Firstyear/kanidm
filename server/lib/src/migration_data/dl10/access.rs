@@ -72,6 +72,8 @@ pub struct BuiltinAcp {
     modify_present_attrs: Vec<Attribute>,
     modify_removed_attrs: Vec<Attribute>,
     modify_classes: Vec<EntryClass>,
+    modify_present_classes: Vec<EntryClass>,
+    modify_remove_classes: Vec<EntryClass>,
     create_classes: Vec<EntryClass>,
     create_attrs: Vec<Attribute>,
 }
@@ -159,9 +161,19 @@ impl From<BuiltinAcp> for EntryInitNew {
         value.modify_removed_attrs.into_iter().for_each(|attr| {
             entry.add_ava(Attribute::AcpModifyRemovedAttr, Value::from(attr));
         });
+
         value.modify_classes.into_iter().for_each(|class| {
             entry.add_ava(Attribute::AcpModifyClass, Value::from(class));
         });
+
+        value.modify_present_classes.into_iter().for_each(|class| {
+            entry.add_ava(Attribute::AcpModifyPresentClass, Value::from(class));
+        });
+
+        value.modify_remove_classes.into_iter().for_each(|class| {
+            entry.add_ava(Attribute::AcpModifyRemoveClass, Value::from(class));
+        });
+
         value.create_classes.into_iter().for_each(|class| {
             entry.add_ava(Attribute::AcpCreateClass, Value::from(class));
         });
@@ -214,7 +226,7 @@ lazy_static! {
             ATTR_RECYCLED.to_string()
         )),
         modify_removed_attrs: vec![Attribute::Class],
-        modify_classes: vec![EntryClass::Recycled],
+        modify_remove_classes: vec![EntryClass::Recycled],
         ..Default::default()
     };
 }
@@ -425,6 +437,7 @@ lazy_static! {
             EntryClass::AccessControlCreate,
             EntryClass::AccessControlDelete,
         ],
+        ..Default::default()
     };
 }
 

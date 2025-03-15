@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use super::profiles::{
     AccessControlReceiverCondition, AccessControlSearchResolved, AccessControlTargetCondition,
 };
-use super::AccessResult;
+use super::AccessSrchResult;
 use std::sync::Arc;
 
 pub(super) enum SearchResult {
@@ -23,32 +23,32 @@ pub(super) fn apply_search_access(
     // that.
     let mut denied = false;
     let mut grant = false;
-    let mut constrain = BTreeSet::default();
+    let constrain = BTreeSet::default();
     let mut allow = BTreeSet::default();
 
     // The access control profile
     match search_filter_entry(ident, related_acp, entry) {
-        AccessResult::Denied => denied = true,
-        AccessResult::Grant => grant = true,
-        AccessResult::Ignore => {}
-        AccessResult::Constrain(mut set) => constrain.append(&mut set),
-        AccessResult::Allow(mut set) => allow.append(&mut set),
+        AccessSrchResult::Denied => denied = true,
+        AccessSrchResult::Grant => grant = true,
+        AccessSrchResult::Ignore => {}
+        // AccessSrchResult::Constrain { mut attr } => constrain.append(&mut attr),
+        AccessSrchResult::Allow { mut attr } => allow.append(&mut attr),
     };
 
     match search_oauth2_filter_entry(ident, entry) {
-        AccessResult::Denied => denied = true,
-        AccessResult::Grant => grant = true,
-        AccessResult::Ignore => {}
-        AccessResult::Constrain(mut set) => constrain.append(&mut set),
-        AccessResult::Allow(mut set) => allow.append(&mut set),
+        AccessSrchResult::Denied => denied = true,
+        AccessSrchResult::Grant => grant = true,
+        AccessSrchResult::Ignore => {}
+        // AccessSrchResult::Constrain { mut attr } => constrain.append(&mut attr),
+        AccessSrchResult::Allow { mut attr } => allow.append(&mut attr),
     };
 
     match search_sync_account_filter_entry(ident, entry) {
-        AccessResult::Denied => denied = true,
-        AccessResult::Grant => grant = true,
-        AccessResult::Ignore => {}
-        AccessResult::Constrain(mut set) => constrain.append(&mut set),
-        AccessResult::Allow(mut set) => allow.append(&mut set),
+        AccessSrchResult::Denied => denied = true,
+        AccessSrchResult::Grant => grant = true,
+        AccessSrchResult::Ignore => {}
+        // AccessSrchResult::Constrain{ mut attr } => constrain.append(&mut attr),
+        AccessSrchResult::Allow { mut attr } => allow.append(&mut attr),
     };
 
     // We'll add more modules later.
@@ -74,17 +74,17 @@ fn search_filter_entry(
     ident: &Identity,
     related_acp: &[AccessControlSearchResolved],
     entry: &Arc<EntrySealedCommitted>,
-) -> AccessResult {
+) -> AccessSrchResult {
     // If this is an internal search, return our working set.
     match &ident.origin {
         IdentType::Internal => {
             trace!(uuid = ?entry.get_display_id(), "Internal operation, bypassing access check");
             // No need to check ACS
-            return AccessResult::Grant;
+            return AccessSrchResult::Grant;
         }
         IdentType::Synch(_) => {
             security_debug!(uuid = ?entry.get_display_id(), "Blocking sync check");
-            return AccessResult::Denied;
+            return AccessSrchResult::Denied;
         }
         IdentType::User(_) => {}
     };
@@ -95,7 +95,7 @@ fn search_filter_entry(
             security_debug!(
                 "denied ❌ - identity access scope 'Synchronise' is not permitted to search"
             );
-            return AccessResult::Denied;
+            return AccessSrchResult::Denied;
         }
         AccessScope::ReadOnly | AccessScope::ReadWrite => {
             // As you were
@@ -161,16 +161,21 @@ fn search_filter_entry(
         .flatten()
         .collect();
 
-    AccessResult::Allow(allowed_attrs)
+    AccessSrchResult::Allow {
+        attr: allowed_attrs,
+    }
 }
 
-fn search_oauth2_filter_entry(ident: &Identity, entry: &Arc<EntrySealedCommitted>) -> AccessResult {
+fn search_oauth2_filter_entry(
+    ident: &Identity,
+    entry: &Arc<EntrySealedCommitted>,
+) -> AccessSrchResult {
     match &ident.origin {
-        IdentType::Internal | IdentType::Synch(_) => AccessResult::Ignore,
+        IdentType::Internal | IdentType::Synch(_) => AccessSrchResult::Ignore,
         IdentType::User(iuser) => {
             if iuser.entry.get_uuid() == UUID_ANONYMOUS {
                 debug!("Anonymous can't access OAuth2 entries, ignoring");
-                return AccessResult::Ignore;
+                return AccessSrchResult::Ignore;
             }
 
             let contains_o2_rs = entry
@@ -190,16 +195,18 @@ fn search_oauth2_filter_entry(ident: &Identity, entry: &Arc<EntrySealedCommitted
             if contains_o2_rs && contains_o2_scope_member {
                 security_debug!(entry = ?entry.get_uuid(), ident = ?iuser.entry.get_uuid2rdn(), "ident is a memberof a group granted an oauth2 scope by this entry");
 
-                return AccessResult::Allow(btreeset!(
-                    Attribute::Class,
-                    Attribute::DisplayName,
-                    Attribute::Uuid,
-                    Attribute::Name,
-                    Attribute::OAuth2RsOriginLanding,
-                    Attribute::Image
-                ));
+                return AccessSrchResult::Allow {
+                    attr: btreeset!(
+                        Attribute::Class,
+                        Attribute::DisplayName,
+                        Attribute::Uuid,
+                        Attribute::Name,
+                        Attribute::OAuth2RsOriginLanding,
+                        Attribute::Image
+                    ),
+                };
             }
-            AccessResult::Ignore
+            AccessSrchResult::Ignore
         }
     }
 }
@@ -207,9 +214,9 @@ fn search_oauth2_filter_entry(ident: &Identity, entry: &Arc<EntrySealedCommitted
 fn search_sync_account_filter_entry(
     ident: &Identity,
     entry: &Arc<EntrySealedCommitted>,
-) -> AccessResult {
+) -> AccessSrchResult {
     match &ident.origin {
-        IdentType::Internal | IdentType::Synch(_) => AccessResult::Ignore,
+        IdentType::Internal | IdentType::Synch(_) => AccessSrchResult::Ignore,
         IdentType::User(iuser) => {
             // Is the user a synced object?
             let is_user_sync_account = iuser
@@ -244,16 +251,18 @@ fn search_sync_account_filter_entry(
                         // We finally got here!
                         security_debug!(entry = ?entry.get_uuid(), ident = ?iuser.entry.get_uuid2rdn(), "ident is a synchronised account from this sync account");
 
-                        return AccessResult::Allow(btreeset!(
-                            Attribute::Class,
-                            Attribute::Uuid,
-                            Attribute::SyncCredentialPortal
-                        ));
+                        return AccessSrchResult::Allow {
+                            attr: btreeset!(
+                                Attribute::Class,
+                                Attribute::Uuid,
+                                Attribute::SyncCredentialPortal
+                            ),
+                        };
                     }
                 }
             }
             // Fall through
-            AccessResult::Ignore
+            AccessSrchResult::Ignore
         }
     }
 }

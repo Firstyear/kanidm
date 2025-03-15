@@ -1,7 +1,5 @@
-
+use crate::prelude::EntryClass;
 use std::collections::BTreeSet;
-use crate::prelude::{EntryClass};
-
 
 lazy_static! {
     /// These entry classes may not be created or deleted, and may invoke some protection rules
@@ -37,6 +35,40 @@ lazy_static! {
             EntryClass::DynGroup,
             // EntryClass::SyncObject,
             EntryClass::Tombstone,
+            EntryClass::Recycled,
+        ];
+
+        BTreeSet::from_iter(classes.into_iter()
+            .map(|ec| ec.into()))
+    };
+
+    /// These classes may NOT be added to ANY ENTRY
+    pub static ref PROTECTED_MOD_PRES_ENTRY_CLASSES: BTreeSet<String> = {
+        let classes = vec![
+            EntryClass::System,
+            EntryClass::DomainInfo,
+            EntryClass::SystemInfo,
+            EntryClass::SystemConfig,
+            EntryClass::DynGroup,
+            EntryClass::SyncObject,
+            EntryClass::Tombstone,
+            EntryClass::Recycled,
+        ];
+
+        BTreeSet::from_iter(classes.into_iter()
+            .map(|ec| ec.into()))
+    };
+
+    /// These classes may NOT be removed from ANY ENTRY
+    pub static ref PROTECTED_MOD_REM_ENTRY_CLASSES: BTreeSet<String> = {
+        let classes = vec![
+            EntryClass::System,
+            EntryClass::DomainInfo,
+            EntryClass::SystemInfo,
+            EntryClass::SystemConfig,
+            EntryClass::DynGroup,
+            EntryClass::SyncObject,
+            EntryClass::Tombstone,
             // EntryClass::Recycled,
         ];
 
@@ -55,5 +87,3 @@ lazy_static! {
             .map(|ec| ec.into()))
     };
 }
-
-
