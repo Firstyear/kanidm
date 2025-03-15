@@ -3666,10 +3666,9 @@ mod tests {
             "displayname class",
             // Allow rem disp name and class
             "displayname class",
-            // And the class allowed is system
-            EntryClass::System.into(),
-            // And the class allowed is system
-            EntryClass::System.into(),
+            // And the classes allowed to add/rem are as such
+            "system recycled",
+            "system recycled",
         );
 
         let me_pres = ModifyEvent::new_impersonate_entry(
@@ -3686,5 +3685,32 @@ mod tests {
 
         // Test not allowed pres (due to system class)
         test_acp_modify!(&me_pres, vec![acp_allow.clone()], &r2_set, false);
+
+        // Test that we can not remove class::system
+        let me_rem_sys = ModifyEvent::new_impersonate_entry(
+            E_TEST_ACCOUNT_1.clone(),
+            filter_all!(f_eq(
+                Attribute::Class,
+                PartialValue::new_iname("testperson1")
+            )),
+            modlist!([m_remove(
+                Attribute::Class,
+                &EntryClass::System.to_partialvalue()
+            )]),
+        );
+
+        test_acp_modify!(&me_rem_sys, vec![acp_allow.clone()], &r2_set, false);
+
+        // Ensure that we can't add recycled.
+        let me_pres = ModifyEvent::new_impersonate_entry(
+            E_TEST_ACCOUNT_1.clone(),
+            filter_all!(f_eq(
+                Attribute::Name,
+                PartialValue::new_iname("testperson1")
+            )),
+            modlist!([m_pres(Attribute::Class, &EntryClass::Recycled.to_value())]),
+        );
+
+        test_acp_modify!(&me_pres, vec![acp_allow.clone()], &r1_set, false);
     }
 }
