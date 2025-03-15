@@ -22,7 +22,6 @@ mod jwskeygen;
 mod keyobject;
 mod memberof;
 mod namehistory;
-mod protected;
 mod refint;
 mod session;
 mod spn;
@@ -44,6 +43,7 @@ trait Plugin {
         Err(OperationError::InvalidState)
     }
 
+    #[allow(dead_code)]
     fn pre_create(
         _qs: &mut QueryServerWriteTransaction,
         // List of what we will commit that is valid?
@@ -243,13 +243,14 @@ impl Plugins {
         attrunique::AttrUnique::pre_create_transform(qs, cand, ce)
     }
 
-    #[instrument(level = "debug", name = "plugins::run_pre_create", skip_all)]
+    #[instrument(level = "trace", name = "plugins::run_pre_create", skip_all)]
     pub fn run_pre_create(
-        qs: &mut QueryServerWriteTransaction,
-        cand: &[Entry<EntrySealed, EntryNew>],
-        ce: &CreateEvent,
+        _qs: &mut QueryServerWriteTransaction,
+        _cand: &[Entry<EntrySealed, EntryNew>],
+        _ce: &CreateEvent,
     ) -> Result<(), OperationError> {
-        protected::Protected::pre_create(qs, cand, ce)
+        // protected::Protected::pre_create(qs, cand, ce)
+        Ok(())
     }
 
     #[instrument(level = "debug", name = "plugins::run_post_create", skip_all)]
@@ -269,7 +270,7 @@ impl Plugins {
         cand: &mut Vec<Entry<EntryInvalid, EntryCommitted>>,
         me: &ModifyEvent,
     ) -> Result<(), OperationError> {
-        protected::Protected::pre_modify(qs, pre_cand, cand, me)?;
+        // protected::Protected::pre_modify(qs, pre_cand, cand, me)?;
         base::Base::pre_modify(qs, pre_cand, cand, me)?;
         valuedeny::ValueDeny::pre_modify(qs, pre_cand, cand, me)?;
         cred_import::CredImport::pre_modify(qs, pre_cand, cand, me)?;
@@ -305,7 +306,7 @@ impl Plugins {
         cand: &mut Vec<Entry<EntryInvalid, EntryCommitted>>,
         me: &BatchModifyEvent,
     ) -> Result<(), OperationError> {
-        protected::Protected::pre_batch_modify(qs, pre_cand, cand, me)?;
+        // protected::Protected::pre_batch_modify(qs, pre_cand, cand, me)?;
         base::Base::pre_batch_modify(qs, pre_cand, cand, me)?;
         valuedeny::ValueDeny::pre_batch_modify(qs, pre_cand, cand, me)?;
         cred_import::CredImport::pre_batch_modify(qs, pre_cand, cand, me)?;
@@ -340,7 +341,7 @@ impl Plugins {
         cand: &mut Vec<Entry<EntryInvalid, EntryCommitted>>,
         de: &DeleteEvent,
     ) -> Result<(), OperationError> {
-        protected::Protected::pre_delete(qs, cand, de)?;
+        // protected::Protected::pre_delete(qs, cand, de)?;
         memberof::MemberOf::pre_delete(qs, cand, de)
     }
 

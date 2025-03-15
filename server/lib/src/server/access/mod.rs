@@ -50,6 +50,7 @@ mod create;
 mod delete;
 mod modify;
 pub mod profiles;
+pub(self) mod protected;
 mod search;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3423,5 +3424,158 @@ mod tests {
 
         // Finally test it!
         test_acp_search_reduce!(&se_anon_ro, vec![acp], r_set, ex_anon_some);
+    }
+
+    #[test]
+    fn test_access_protected_deny_create() {
+        sketching::test_init();
+
+        let ev1 = entry_init!(
+            (Attribute::Class, EntryClass::Account.to_value()),
+            (Attribute::Name, Value::new_iname("testperson1")),
+            (Attribute::Uuid, Value::Uuid(UUID_TEST_ACCOUNT_1))
+        );
+        let r1_set = vec![ev1];
+
+        let ev2 = entry_init!(
+            (Attribute::Class, EntryClass::Account.to_value()),
+            (Attribute::Class, EntryClass::System.to_value()),
+            (Attribute::Name, Value::new_iname("testperson1")),
+            (Attribute::Uuid, Value::Uuid(UUID_TEST_ACCOUNT_1))
+        );
+
+        let r2_set = vec![ev2];
+
+        let ce_admin = CreateEvent::new_impersonate_identity(
+            Identity::from_impersonate_entry_readwrite(E_TEST_ACCOUNT_1.clone()),
+            vec![],
+        );
+
+        let acp = AccessControlCreate::from_raw(
+            "test_create",
+            Uuid::new_v4(),
+            // Apply to admin
+            UUID_TEST_GROUP_1,
+            // To create matching filter testperson
+            // Can this be empty?
+            filter_valid!(f_eq(
+                Attribute::Name,
+                PartialValue::new_iname("testperson1")
+            )),
+            // classes
+            EntryClass::Account.into(),
+            // attrs
+            "class name uuid",
+        );
+
+        // Test allowed to create
+        test_acp_create!(&ce_admin, vec![acp.clone()], &r1_set, true);
+        // Test reject create (not allowed attr)
+        test_acp_create!(&ce_admin, vec![acp.clone()], &r2_set, false);
+    }
+
+    #[test]
+    fn test_access_protected_deny_delete() {
+        sketching::test_init();
+
+        let ev1 = entry_init!(
+            (Attribute::Class, EntryClass::Account.to_value()),
+            (Attribute::Name, Value::new_iname("testperson1")),
+            (Attribute::Uuid, Value::Uuid(UUID_TEST_ACCOUNT_1))
+        )
+        .into_sealed_committed();
+        let r1_set = vec![Arc::new(ev1)];
+
+        let ev2 = entry_init!(
+            (Attribute::Class, EntryClass::Account.to_value()),
+            (Attribute::Class, EntryClass::System.to_value()),
+            (Attribute::Name, Value::new_iname("testperson1")),
+            (Attribute::Uuid, Value::Uuid(UUID_TEST_ACCOUNT_1))
+        )
+        .into_sealed_committed();
+
+        let r2_set = vec![Arc::new(ev2)];
+
+        let de = DeleteEvent::new_impersonate_entry(
+            E_TEST_ACCOUNT_1.clone(),
+            filter_all!(f_eq(
+                Attribute::Name,
+                PartialValue::new_iname("testperson1")
+            )),
+        );
+
+        let acp = AccessControlDelete::from_raw(
+            "test_delete",
+            Uuid::new_v4(),
+            // Apply to admin
+            UUID_TEST_GROUP_1,
+            // To delete testperson
+            filter_valid!(f_eq(
+                Attribute::Name,
+                PartialValue::new_iname("testperson1")
+            )),
+        );
+
+        // Test allowed to delete
+        test_acp_delete!(&de, vec![acp.clone()], &r1_set, true);
+        // Test not allowed to delete
+        test_acp_delete!(&de, vec![acp.clone()], &r2_set, false);
+    }
+
+    #[test]
+    fn test_access_protected_deny_modify() {
+        sketching::test_init();
+
+        let ev1 = entry_init!(
+            (Attribute::Class, EntryClass::Account.to_value()),
+            (Attribute::Name, Value::new_iname("testperson1")),
+            (Attribute::Uuid, Value::Uuid(UUID_TEST_ACCOUNT_1))
+        )
+        .into_sealed_committed();
+        let r1_set = vec![Arc::new(ev1)];
+
+        let ev2 = entry_init!(
+            (Attribute::Class, EntryClass::Account.to_value()),
+            (Attribute::Class, EntryClass::System.to_value()),
+            (Attribute::Name, Value::new_iname("testperson1")),
+            (Attribute::Uuid, Value::Uuid(UUID_TEST_ACCOUNT_1))
+        )
+        .into_sealed_committed();
+
+        let r2_set = vec![Arc::new(ev2)];
+
+        // Allow name and class, class is account
+        let acp_allow = AccessControlModify::from_raw(
+            "test_modify_allow",
+            Uuid::new_v4(),
+            // Apply to admin
+            UUID_TEST_GROUP_1,
+            // To modify testperson
+            filter_valid!(f_eq(
+                Attribute::Name,
+                PartialValue::new_iname("testperson1")
+            )),
+            // Allow pres disp name and class
+            "displayname class",
+            // Allow rem disp name and class
+            "displayname class",
+            // And the class allowed is system
+            EntryClass::System.into(),
+        );
+
+        let me_pres = ModifyEvent::new_impersonate_entry(
+            E_TEST_ACCOUNT_1.clone(),
+            filter_all!(f_eq(
+                Attribute::Name,
+                PartialValue::new_iname("testperson1")
+            )),
+            modlist!([m_pres(Attribute::DisplayName, &Value::new_utf8s("value"))]),
+        );
+
+        // Test allowed pres
+        test_acp_modify!(&me_pres, vec![acp_allow.clone()], &r1_set, true);
+
+        // Test not allowed pres (due to system class)
+        test_acp_modify!(&me_pres, vec![acp_allow.clone()], &r2_set, false);
     }
 }

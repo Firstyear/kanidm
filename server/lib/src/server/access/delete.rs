@@ -1,6 +1,7 @@
 use super::profiles::{
     AccessControlDeleteResolved, AccessControlReceiverCondition, AccessControlTargetCondition,
 };
+use super::protected::PROTECTED_ENTRY_CLASSES;
 use crate::prelude::*;
 use std::sync::Arc;
 
@@ -155,25 +156,27 @@ fn protected_filter_entry(ident: &Identity, entry: &Arc<EntrySealedCommitted>) -
             IResult::Denied
         }
         IdentType::User(_) => {
-            // Now check things ...
-
-            // For now we just block create on sync object
-            if let Some(classes) = entry.get_ava_set(Attribute::Class) {
-                if classes.contains(&EntryClass::SyncObject.into()) {
-                    // Block the mod
-                    security_access!("attempt to delete with protected class type");
-                    return IResult::Denied;
-                }
-            };
-
             // Prevent deletion of entries that exist in the system controlled entry range.
             if entry.get_uuid() <= UUID_ANONYMOUS {
                 security_access!("attempt to delete system builtin entry");
                 return IResult::Denied;
             }
 
-            // Checks exhausted, no more input from us
-            IResult::Ignore
+            // Prevent deleting some protected types.
+            if let Some(classes) = entry.get_ava_as_iutf8(Attribute::Class) {
+                if classes.is_disjoint(&PROTECTED_ENTRY_CLASSES) {
+                    // It's different, go ahead
+                    IResult::Ignore
+                } else {
+                    // Block the mod, something is present
+                    security_access!("attempt to create with protected class type");
+                    IResult::Denied
+                }
+            } else {
+                // Nothing to check - this entry will fail to create anyway because it has
+                // no classes
+                IResult::Ignore
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 use super::profiles::{
     AccessControlCreateResolved, AccessControlReceiverCondition, AccessControlTargetCondition,
 };
+use super::protected::PROTECTED_ENTRY_CLASSES;
 use crate::prelude::*;
 use std::collections::BTreeSet;
 
@@ -177,18 +178,18 @@ fn protected_filter_entry(ident: &Identity, entry: &Entry<EntryInit, EntryNew>) 
         }
         IdentType::User(_) => {
             // Now check things ...
-
-            // For now we just block create on sync object
-            if let Some(classes) = entry.get_ava_set(Attribute::Class) {
-                if classes.contains(&EntryClass::SyncObject.into()) {
-                    // Block the mod
+            if let Some(classes) = entry.get_ava_as_iutf8(Attribute::Class) {
+                if classes.is_disjoint(&PROTECTED_ENTRY_CLASSES) {
+                    // It's different, go ahead
+                    IResult::Ignore
+                } else {
+                    // Block the mod, something is present
                     security_access!("attempt to create with protected class type");
                     IResult::Denied
-                } else {
-                    IResult::Ignore
                 }
             } else {
-                // Nothing to check.
+                // Nothing to check - this entry will fail to create anyway because it has
+                // no classes
                 IResult::Ignore
             }
         }

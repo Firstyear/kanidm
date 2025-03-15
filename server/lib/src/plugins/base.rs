@@ -695,7 +695,6 @@ mod tests {
 
         let e = entry_init!(
             (Attribute::Class, EntryClass::Person.to_value()),
-            (Attribute::Class, EntryClass::System.to_value()),
             (Attribute::Name, Value::new_iname("testperson")),
             (Attribute::DisplayName, Value::new_iname("testperson")),
             (
@@ -726,7 +725,6 @@ mod tests {
 
         let e = entry_init!(
             (Attribute::Class, EntryClass::Person.to_value()),
-            (Attribute::Class, EntryClass::System.to_value()),
             (Attribute::Name, Value::new_iname("testperson")),
             (Attribute::DisplayName, Value::new_iname("testperson")),
             (
