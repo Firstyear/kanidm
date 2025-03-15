@@ -50,7 +50,7 @@ mod create;
 mod delete;
 mod modify;
 pub mod profiles;
-pub(self) mod protected;
+mod protected;
 mod search;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
