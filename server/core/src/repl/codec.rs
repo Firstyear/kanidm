@@ -94,7 +94,7 @@ fn encode_length_checked_json<R: Serialize>(msg: R, dst: &mut BytesMut) -> Resul
 
     serde_json::to_writer(&mut json_writer, &msg).map_err(|err| {
         error!(?err, "consumer encoding error");
-        io::Error::new(io::ErrorKind::Other, "JSON encode error")
+        io::Error::other("JSON encode error")
     })?;
 
     let json_buf = json_writer.into_inner();
@@ -104,7 +104,7 @@ fn encode_length_checked_json<R: Serialize>(msg: R, dst: &mut BytesMut) -> Resul
 
     if final_len_bytes.len() != work.len() {
         error!("consumer buffer size error");
-        return Err(io::Error::new(io::ErrorKind::Other, "buffer length error"));
+        return Err(io::Error::other("buffer length error"));
     }
 
     work.copy_from_slice(&final_len_bytes);

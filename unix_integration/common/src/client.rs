@@ -1,8 +1,7 @@
-use std::error::Error;
-use std::io::{Error as IoError, ErrorKind};
-
 use bytes::{BufMut, BytesMut};
 use futures::{SinkExt, StreamExt};
+use std::error::Error;
+use std::io::Error as IoError;
 use tokio::net::UnixStream;
 // use tokio::runtime::Builder;
 use tokio::time::{self, Duration};
@@ -35,7 +34,7 @@ impl Encoder<&ClientRequest> for ClientCodec {
     fn encode(&mut self, msg: &ClientRequest, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let data = serde_json::to_vec(msg).map_err(|e| {
             error!("socket encoding error -> {:?}", e);
-            IoError::new(ErrorKind::Other, "JSON encode error")
+            IoError::other("JSON encode error")
         })?;
         debug!("Attempting to send request -> {}", msg.as_safe_string());
         dst.put(data.as_slice());
@@ -85,7 +84,7 @@ impl DaemonClient {
             }
             _ => {
                 error!("Error making request to kanidm_unixd");
-                Err(Box::new(IoError::new(ErrorKind::Other, "oh no!")))
+                Err(Box::new(IoError::other("oh no!")))
             }
         }
     }
@@ -101,7 +100,7 @@ impl DaemonClient {
         tokio::select! {
             _ = &mut sleep => {
                 error!(?timeout, "Timed out making request to kanidm_unixd");
-                Err(Box::new(IoError::new(ErrorKind::Other, "timeout")))
+                Err(Box::new(IoError::other("timeout")))
             }
             res = self.call_inner(req) => {
                 res

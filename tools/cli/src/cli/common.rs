@@ -19,6 +19,7 @@ pub enum OpType {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum ToClientError {
     NeedLogin(String),
     NeedReauth(String, KanidmClient),

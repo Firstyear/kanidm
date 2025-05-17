@@ -20,7 +20,7 @@ use sketching::*;
 use crate::config::TlsConfiguration;
 
 use std::fs;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 
 const CA_VALID_DAYS: u32 = 30;
@@ -105,26 +105,17 @@ pub fn setup_tls(
     tls_builder
         .set_certificate_chain_file(tls_param.chain.clone())
         .map_err(|err| {
-            std::io::Error::new(
-                ErrorKind::Other,
-                format!("Failed to create TLS listener: {:?}", err),
-            )
+            std::io::Error::other(format!("Failed to create TLS listener: {:?}", err))
         })?;
 
     tls_builder
         .set_private_key_file(tls_param.key.clone(), SslFiletype::PEM)
         .map_err(|err| {
-            std::io::Error::new(
-                ErrorKind::Other,
-                format!("Failed to create TLS listener: {:?}", err),
-            )
+            std::io::Error::other(format!("Failed to create TLS listener: {:?}", err))
         })?;
 
     tls_builder.check_private_key().map_err(|err| {
-        std::io::Error::new(
-            ErrorKind::Other,
-            format!("Failed to create TLS listener: {:?}", err),
-        )
+        std::io::Error::other(format!("Failed to create TLS listener: {:?}", err))
     })?;
 
     // If configured, setup TLS client authentication.
@@ -150,14 +141,11 @@ pub fn setup_tls(
         tls_builder.set_session_cache_mode(SslSessionCacheMode::OFF);
 
         let read_dir = fs::read_dir(client_ca).map_err(|err| {
-            std::io::Error::new(
-                ErrorKind::Other,
-                format!(
-                    "Failed to create TLS listener while loading client ca from {}: {:?}",
-                    client_ca.display(),
-                    err
-                ),
-            )
+            std::io::Error::other(format!(
+                "Failed to create TLS listener while loading client ca from {}: {:?}",
+                client_ca.display(),
+                err
+            ))
         })?;
 
         for cert_dir_ent in read_dir.filter_map(|item| item.ok()).filter(|item| {
@@ -172,36 +160,24 @@ pub fn setup_tls(
             fs::File::open(cert_dir_ent.path())
                 .and_then(|mut file| file.read_to_string(&mut cert_pem))
                 .map_err(|err| {
-                    std::io::Error::new(
-                        ErrorKind::Other,
-                        format!("Failed to create TLS listener: {:?}", err),
-                    )
+                    std::io::Error::other(format!("Failed to create TLS listener: {:?}", err))
                 })?;
 
             let cert = X509::from_pem(cert_pem.as_bytes()).map_err(|err| {
-                std::io::Error::new(
-                    ErrorKind::Other,
-                    format!("Failed to create TLS listener: {:?}", err),
-                )
+                std::io::Error::other(format!("Failed to create TLS listener: {:?}", err))
             })?;
 
             let cert_store = tls_builder.cert_store_mut();
             cert_store.add_cert(cert.clone()).map_err(|err| {
-                std::io::Error::new(
-                    ErrorKind::Other,
-                    format!(
-                        "Failed to load cert store while creating TLS listener: {:?}",
-                        err
-                    ),
-                )
+                std::io::Error::other(format!(
+                    "Failed to load cert store while creating TLS listener: {:?}",
+                    err
+                ))
             })?;
             // This tells the client what CA's they should use. It DOES NOT
             // verify them. That's the job of the cert store above!
             tls_builder.add_client_ca(&cert).map_err(|err| {
-                std::io::Error::new(
-                    ErrorKind::Other,
-                    format!("Failed to create TLS listener: {:?}", err),
-                )
+                std::io::Error::other(format!("Failed to create TLS listener: {:?}", err))
             })?;
         }
 
@@ -236,17 +212,11 @@ pub fn setup_tls(
 
     // let's enforce some TLS minimums!
     let privkey = tls_acceptor.context().private_key().ok_or_else(|| {
-        std::io::Error::new(
-            ErrorKind::Other,
-            "Failed to access tls_acceptor private key".to_string(),
-        )
+        std::io::Error::other("Failed to access tls_acceptor private key".to_string())
     })?;
 
     check_privkey_minimums(privkey).map_err(|err| {
-        std::io::Error::new(
-            ErrorKind::Other,
-            format!("Private key minimums were not met: {:?}", err),
-        )
+        std::io::Error::other(format!("Private key minimums were not met: {:?}", err))
     })?;
 
     Ok(Some(tls_acceptor))

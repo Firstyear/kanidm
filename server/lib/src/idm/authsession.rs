@@ -1224,6 +1224,7 @@ impl AuthSession {
         cred_id: Uuid,
         key_object: Arc<KeyObject>,
     ) -> (Option<Self>, AuthState) {
+        #[allow(clippy::large_enum_variant)]
         /// An inner enum to allow us to more easily define state within this fn
         enum State {
             Expired,

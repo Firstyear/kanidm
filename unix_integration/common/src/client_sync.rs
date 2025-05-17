@@ -1,7 +1,7 @@
 use crate::constants::DEFAULT_CONN_TIMEOUT;
 use crate::unix_proto::{ClientRequest, ClientResponse};
 use std::error::Error;
-use std::io::{Error as IoError, ErrorKind, Read, Write};
+use std::io::{Error as IoError, Read, Write};
 use std::time::{Duration, SystemTime};
 
 pub use std::os::unix::net::UnixStream;
@@ -49,7 +49,7 @@ impl DaemonClientBlocking {
 
         let data = serde_json::to_vec(&req).map_err(|e| {
             error!("socket encoding error -> {:?}", e);
-            Box::new(IoError::new(ErrorKind::Other, "JSON encode error"))
+            Box::new(IoError::other("JSON encode error"))
         })?;
 
         match self.stream.set_read_timeout(Some(timeout)) {
@@ -138,7 +138,7 @@ impl DaemonClientBlocking {
         // Now attempt to decode.
         let cr = serde_json::from_slice::<ClientResponse>(data.as_slice()).map_err(|e| {
             error!("socket encoding error -> {:?}", e);
-            Box::new(IoError::new(ErrorKind::Other, "JSON decode error"))
+            Box::new(IoError::other("JSON decode error"))
         })?;
 
         Ok(cr)

@@ -72,7 +72,7 @@ impl Encoder<TaskResponse> for TaskCodec {
         debug!("Attempting to send request -> {:?} ...", msg);
         let data = serde_json::to_vec(&msg).map_err(|e| {
             error!("socket encoding error -> {:?}", e);
-            io::Error::new(io::ErrorKind::Other, "JSON encode error")
+            io::Error::other("JSON encode error")
         })?;
         dst.put(data.as_slice());
         Ok(())
