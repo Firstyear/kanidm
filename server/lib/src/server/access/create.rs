@@ -101,6 +101,9 @@ fn create_filter_entry<'a>(
         }
     };
 
+    debug!(?create_attrs);
+    debug!(?create_classes);
+
     //      Find the set of related acps for this entry.
     //
     //      For each "created" entry.
@@ -109,14 +112,17 @@ fn create_filter_entry<'a>(
     //              allow
     //          if no acp allows, fail operation.
     let allow = related_acp.iter().any(|accr| {
+        debug!(acs = %accr.acp.acp.name, "BEGIN");
         // Assert that the receiver condition applies.
         match &accr.receiver_condition {
             AccessControlReceiverCondition::GroupChecked => {
                 // The groups were already checked during filter resolution. Trust
                 // that result, and continue.
+                debug!("Group receiver condition satisfied");
             }
             AccessControlReceiverCondition::EntryManager => {
                 // Currently, this is unsatisfiable for creates.
+                debug!("Unsatisfiable receiver condition - creates may not be influenced by entry manager.");
                 return false;
             }
         };
@@ -124,7 +130,7 @@ fn create_filter_entry<'a>(
         match &accr.target_condition {
             AccessControlTargetCondition::Scope(f_res) => {
                 if !entry.entry_match_no_index(f_res) {
-                    trace!(?entry, acs = %accr.acp.acp.name, "entry DOES NOT match acs");
+                    debug!(?entry, acs = %accr.acp.acp.name, "entry DOES NOT match acs");
                     // Does not match, fail this rule.
                     return false;
                 }
@@ -134,7 +140,7 @@ fn create_filter_entry<'a>(
         // -- Conditions pass -- now verify the attributes.
 
         let entry_name = entry.get_display_id();
-        security_access!(%entry_name, acs = ?accr.acp.acp.name, "entry matches acs");
+        debug!(%entry_name, acs = ?accr.acp.acp.name, "entry matches acs");
         // It matches, so now we have to check attrs and classes.
         // Remember, we have to match ALL requested attrs
         // and classes to pass!

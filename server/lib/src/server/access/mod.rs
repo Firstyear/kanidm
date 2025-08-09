@@ -255,6 +255,7 @@ pub trait AccessControlsTransaction<'a> {
         // else, we calculate this, and then stash/cache the uuids.
 
         let ident_memberof = ident.get_memberof();
+        debug!(?ident_memberof);
 
         // let related_acp: Vec<(&AccessControlSearch, Filter<FilterValidResolved>)> =
         let related_acp: Vec<AccessControlSearchResolved<'b>> = search_state
