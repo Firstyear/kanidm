@@ -28,6 +28,10 @@ origin = "https://localhost:8443"
 schedule = "@hourly"
 # enabled = true # default enabled
 
+# default is gzip, but can also be "nocompression"
+compression = "gzip"
+
+
 [replication]
 origin = "repl://127.0.0.1:8444"
 bindaddress = "0.0.0.0:8444"

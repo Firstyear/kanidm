@@ -1,9 +1,11 @@
 //! Relates to backup functionality in the Server
-use std::{fmt::Display, path::Path};
+use std::{fmt::Display, path::Path, str::FromStr};
 
-use serde::Deserialize;
+use serde_with::DeserializeFromStr;
+use sketching::tracing::warn;
 
-#[derive(Default, Deserialize, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, DeserializeFromStr)]
+/// Compression types for backups, defaults to Gzip
 pub enum BackupCompression {
     NoCompression,
     #[default]
@@ -52,13 +54,52 @@ impl From<String> for BackupCompression {
             "gzip" => BackupCompression::Gzip,
             "none" | "nocompression" => BackupCompression::NoCompression,
             _ => {
-                eprintln!(
-                    "Unknown compression type '{}', defaulting to {}",
+                warn!(
+                    "Unknown compression type '{}', should be one of nocompression, gzip - defaulting to {}",
                     s,
                     BackupCompression::default()
                 );
                 BackupCompression::default()
             }
+        }
+    }
+}
+
+impl FromStr for BackupCompression {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(s.to_string().into())
+    }
+}
+
+#[test]
+
+fn test_backup_compression_identify() {
+    let gzip_path = Path::new("/var/lib/kanidm/backups/backup-2024-01-01.tar.gz");
+    let no_comp_path = Path::new("/var/lib/kanidm/backups/backup-2024-01-01.tar");
+
+    assert_eq!(
+        BackupCompression::identify_file(gzip_path),
+        BackupCompression::Gzip
+    );
+    assert_eq!(
+        BackupCompression::identify_file(no_comp_path),
+        BackupCompression::NoCompression
+    );
+
+    for (input, expected) in [
+        (vec!["gzip", "Gzip", "GzIp"], BackupCompression::Gzip),
+        (
+            vec!["none", "NoNe", "nocompression", "NoCompression"],
+            BackupCompression::NoCompression,
+        ),
+    ] {
+        for i in input {
+            assert_eq!(
+                BackupCompression::from_str(i).expect("Threw an error?"),
+                expected
+            );
         }
     }
 }

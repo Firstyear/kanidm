@@ -138,5 +138,6 @@ schedule = "00 22 * * *"
 #   Number of backups to keep (default 7)
 # versions = 7
 
-# Compression can either be "gzip" or "nocompression", will compress the backups on disk if specified.
+# Compression can either be "gzip" or "nocompression".
+# Defaults to "gzip" if unspecified.
 compression = "gzip"
