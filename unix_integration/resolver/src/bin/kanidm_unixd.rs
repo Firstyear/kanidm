@@ -30,7 +30,7 @@ use kanidm_unix_resolver::db::{Cache, Db};
 use kanidm_unix_resolver::idprovider::interface::IdProvider;
 use kanidm_unix_resolver::idprovider::kanidm::KanidmProvider;
 use kanidm_unix_resolver::idprovider::system::SystemProvider;
-use kanidm_unix_resolver::resolver::Resolver;
+use kanidm_unix_resolver::resolver::{AuthSession, Resolver};
 use kanidm_utils_users::{get_current_gid, get_current_uid, get_effective_gid, get_effective_uid};
 use libc::umask;
 use lru::LruCache;
@@ -61,6 +61,8 @@ use tokio_util::codec::Framed;
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
+const DEFAULT_CONCURRENT_AUTH_SESSIONS: NonZeroUsize = NonZeroUsize::new(64)
+    .expect("Invalid DEFAULT_CONCURRENT_AUTH_SESSIONS constant at compile time");
 const REFRESH_DEBOUNCE_SIZE: NonZeroUsize =
     NonZeroUsize::new(16).expect("Invalid REFRESH_DEBOUNCE_SIZE constant at compile time");
 const REFRESH_DEBOUNCE_WINDOW: Duration = Duration::from_secs(5);
@@ -180,7 +182,9 @@ async fn handle_client(
     let codec: JsonCodec<ClientRequest, ClientResponse> = JsonCodec::default();
 
     let mut reqs = Framed::new(sock, codec);
-    let mut pam_auth_session_state = None;
+    let mut session_id_counter: u64 = 1;
+    let mut pam_auth_session_state: LruCache<u64, AuthSession> =
+        LruCache::new(DEFAULT_CONCURRENT_AUTH_SESSIONS);
 
     // Setup a broadcast channel so that if we have an unexpected disconnection, we can
     // tell consumers to stop work.
@@ -248,46 +252,74 @@ async fn handle_client(
                         ClientResponse::NssGroup(None)
                     }),
                 ClientRequest::PamAuthenticateInit { account_id, info } => {
-                    match &pam_auth_session_state {
-                        Some(_auth_session) => {
-                            // Invalid to init a request twice.
-                            warn!("Attempt to init auth session while current session is active");
-                            // Clean the former session, something is wrong.
-                            pam_auth_session_state = None;
-                            ClientResponse::Error(OperationError::KU001InitWhileSessionActive)
-                        }
-                        None => {
-                            let current_time = OffsetDateTime::now_utc();
+                    let current_time = OffsetDateTime::now_utc();
 
-                            match cachelayer
-                                .pam_account_authenticate_init(
-                                    account_id.as_str(),
-                                    &info,
-                                    current_time,
-                                    shutdown_tx.subscribe(),
-                                )
-                                .await
-                            {
-                                Ok((auth_session, pam_auth_response)) => {
-                                    pam_auth_session_state = Some(auth_session);
-                                    pam_auth_response.into()
+                    match cachelayer
+                        .pam_account_authenticate_init(
+                            account_id.as_str(),
+                            &info,
+                            current_time,
+                            shutdown_tx.subscribe(),
+                        )
+                        .await
+                    {
+                        Ok((auth_session, pam_auth_response)) => {
+
+                            let session_id = session_id_counter;
+                            session_id_counter += 1;
+
+                            if pam_auth_session_state.push(session_id, auth_session).is_some() {
+                                // Something really bad is up, stop everything.
+                                pam_auth_session_state.clear();
+                                error!("session_id was reused, unable to proceed. cancelling all inflight authentication sessions.");
+                                ClientResponse::Error(OperationError::KU001InitWhileSessionActive)
+                            } else {
+                                ClientResponse::PamAuthenticateStepResponse {
+                                    response: pam_auth_response,
+                                    session_id,
                                 }
-                                Err(_) => ClientResponse::Error(OperationError::KU004PamInitFailed),
                             }
                         }
+                        Err(_) => ClientResponse::Error(OperationError::KU004PamInitFailed),
                     }
                 }
-                ClientRequest::PamAuthenticateStep(pam_next_req) => match &mut pam_auth_session_state {
-                    Some(auth_session) => cachelayer
-                        .pam_account_authenticate_step(auth_session, pam_next_req)
-                        .await
-                        .map(|pam_auth_response| pam_auth_response.into())
-                        .unwrap_or(ClientResponse::Error(OperationError::KU003PamAuthFailed)),
-                    None => {
-                        warn!("Attempt to continue auth session while current session is inactive");
-                        ClientResponse::Error(OperationError::KU002ContinueWhileSessionInActive)
+                ClientRequest::PamAuthenticateStep {
+                    request,
+                    session_id,
+                } => {
+                    match pam_auth_session_state.get_mut(&session_id) {
+                        Some(auth_session) => {
+                            let response = cachelayer
+                                .pam_account_authenticate_step(auth_session, request)
+                                .await;
+
+                            let is_complete = auth_session.is_complete();
+
+                            // Release the reference so that we can manipulate the
+                            // btreemap if needed
+                            let _ = auth_session;
+
+                            if let Ok(pam_auth_response) = response {
+                                // What was the response? Is it a terminating case?
+                                if is_complete {
+                                    pam_auth_session_state.pop(&session_id);
+                                }
+
+                                ClientResponse::PamAuthenticateStepResponse {
+                                    response: pam_auth_response,
+                                    session_id,
+                                }
+                            } else {
+                                ClientResponse::Error(OperationError::KU003PamAuthFailed)
+                            }
+                        }
+                        None => {
+                            error!("Attempt to continue auth session, but session id was not present. There may be too many concurrent authentication sessions in progress.");
+                            ClientResponse::Error(OperationError::KU002ContinueWhileSessionInActive)
+                        }
                     }
-                },
+
+                }
                 ClientRequest::PamAccountAllowed(account_id) => cachelayer
                     .pam_account_allowed(account_id.as_str())
                     .await

@@ -163,20 +163,32 @@ pub fn sm_authenticate_connected<P: PamHandler>(
         };
 
         match client_response {
-            ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::Success) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response: PamAuthResponse::Success,
+                session_id: _,
+            } => {
                 return PamResultCode::PAM_SUCCESS;
             }
-            ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::Denied) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response: PamAuthResponse::Denied,
+                session_id: _,
+            } => {
                 return PamResultCode::PAM_AUTH_ERR;
             }
-            ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::Unknown) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response: PamAuthResponse::Unknown,
+                session_id: _,
+            } => {
                 if opts.ignore_unknown_user {
                     return PamResultCode::PAM_IGNORE;
                 } else {
                     return PamResultCode::PAM_USER_UNKNOWN;
                 }
             }
-            ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::Password) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response: PamAuthResponse::Password,
+                session_id,
+            } => {
                 let mut authtok = None;
                 std::mem::swap(&mut authtok, &mut stacked_authtok);
 
@@ -192,24 +204,31 @@ pub fn sm_authenticate_connected<P: PamHandler>(
 
                 // Now setup the request for the next loop.
                 timeout = None;
-                req = ClientRequest::PamAuthenticateStep(PamAuthRequest::Password { cred });
+                req = ClientRequest::PamAuthenticateStep {
+                    request: PamAuthRequest::Password { cred },
+                    session_id,
+                };
                 continue;
             }
-            ClientResponse::PamAuthenticateStepResponse(
-                PamAuthResponse::DeviceAuthorizationGrant { data },
-            ) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response: PamAuthResponse::DeviceAuthorizationGrant { data },
+                session_id,
+            } => {
                 if let Err(err) = pamh.message_device_grant(&data) {
                     return err;
                 };
 
                 timeout = Some(u64::from(data.expires_in));
-                req =
-                    ClientRequest::PamAuthenticateStep(PamAuthRequest::DeviceAuthorizationGrant {
-                        data,
-                    });
+                req = ClientRequest::PamAuthenticateStep {
+                    request: PamAuthRequest::DeviceAuthorizationGrant { data },
+                    session_id,
+                };
                 continue;
             }
-            ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::MFACode { msg: _ }) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response: PamAuthResponse::MFACode { msg: _ },
+                session_id,
+            } => {
                 let cred = match pamh.prompt_for_mfacode() {
                     Ok(Some(cred)) => cred,
                     Ok(None) => return PamResultCode::PAM_CRED_INSUFFICIENT,
@@ -218,13 +237,20 @@ pub fn sm_authenticate_connected<P: PamHandler>(
 
                 // Now setup the request for the next loop.
                 timeout = None;
-                req = ClientRequest::PamAuthenticateStep(PamAuthRequest::MFACode { cred });
+                req = ClientRequest::PamAuthenticateStep {
+                    request: PamAuthRequest::MFACode { cred },
+                    session_id,
+                };
                 continue;
             }
-            ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::MFAPoll {
-                msg,
-                polling_interval,
-            }) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response:
+                    PamAuthResponse::MFAPoll {
+                        msg,
+                        polling_interval,
+                    },
+                session_id,
+            } => {
                 if let Err(err) = pamh.message(msg.as_str()) {
                     if opts.debug {
                         println!("Message prompt failed");
@@ -235,21 +261,33 @@ pub fn sm_authenticate_connected<P: PamHandler>(
                 active_polling_interval = Duration::from_secs(polling_interval.into());
 
                 timeout = None;
-                req = ClientRequest::PamAuthenticateStep(PamAuthRequest::MFAPoll);
+                req = ClientRequest::PamAuthenticateStep {
+                    request: PamAuthRequest::MFAPoll,
+                    session_id,
+                };
                 // We don't need to actually sleep here as we immediately will poll and then go
                 // into the MFAPollWait response below.
             }
-            ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::MFAPollWait) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response: PamAuthResponse::MFAPollWait,
+                session_id,
+            } => {
                 // Counter intuitive, but we don't need a max poll attempts here because
                 // if the resolver goes away, then this will error on the sock and
                 // will shutdown. This allows the resolver to dynamically extend the
                 // timeout if needed, and removes logic from the front end.
                 std::thread::sleep(active_polling_interval);
                 timeout = None;
-                req = ClientRequest::PamAuthenticateStep(PamAuthRequest::MFAPoll);
+                req = ClientRequest::PamAuthenticateStep {
+                    request: PamAuthRequest::MFAPoll,
+                    session_id,
+                };
             }
 
-            ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::SetupPin { msg }) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response: PamAuthResponse::SetupPin { msg },
+                session_id,
+            } => {
                 if let Err(err) = pamh.message(msg.as_str()) {
                     return err;
                 }
@@ -291,10 +329,16 @@ pub fn sm_authenticate_connected<P: PamHandler>(
 
                 // Now setup the request for the next loop.
                 timeout = None;
-                req = ClientRequest::PamAuthenticateStep(PamAuthRequest::SetupPin { pin });
+                req = ClientRequest::PamAuthenticateStep {
+                    request: PamAuthRequest::SetupPin { pin },
+                    session_id,
+                };
                 continue;
             }
-            ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::Pin) => {
+            ClientResponse::PamAuthenticateStepResponse {
+                response: PamAuthResponse::Pin,
+                session_id,
+            } => {
                 let mut authtok = None;
                 std::mem::swap(&mut authtok, &mut stacked_authtok);
 
@@ -310,7 +354,10 @@ pub fn sm_authenticate_connected<P: PamHandler>(
 
                 // Now setup the request for the next loop.
                 timeout = None;
-                req = ClientRequest::PamAuthenticateStep(PamAuthRequest::Pin { cred });
+                req = ClientRequest::PamAuthenticateStep {
+                    request: PamAuthRequest::Pin { cred },
+                    session_id,
+                };
                 continue;
             }
 

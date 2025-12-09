@@ -125,7 +125,10 @@ pub enum ClientRequest {
         account_id: String,
         info: PamServiceInfo,
     },
-    PamAuthenticateStep(PamAuthRequest),
+    PamAuthenticateStep {
+        request: PamAuthRequest,
+        session_id: u64,
+    },
     PamAccountAllowed(String),
     PamAccountBeginSession(String),
     InvalidateCache,
@@ -151,7 +154,7 @@ impl ClientRequest {
                 info.tty.as_deref().unwrap_or(""),
                 info.rhost.as_deref().unwrap_or("")
             ),
-            ClientRequest::PamAuthenticateStep(_) => "PamAuthenticateStep".to_string(),
+            ClientRequest::PamAuthenticateStep { .. } => "PamAuthenticateStep".to_string(),
             ClientRequest::PamAccountAllowed(id) => {
                 format!("PamAccountAllowed({id})")
             }
@@ -178,18 +181,15 @@ pub enum ClientResponse {
     NssGroup(Option<NssGroup>),
 
     PamStatus(Option<bool>),
-    PamAuthenticateStepResponse(PamAuthResponse),
+    PamAuthenticateStepResponse {
+        response: PamAuthResponse,
+        session_id: u64,
+    },
 
     ProviderStatus(Vec<ProviderStatus>),
 
     Ok,
     Error(OperationError),
-}
-
-impl From<PamAuthResponse> for ClientResponse {
-    fn from(par: PamAuthResponse) -> Self {
-        ClientResponse::PamAuthenticateStepResponse(par)
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

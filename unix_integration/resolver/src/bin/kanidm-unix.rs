@@ -106,20 +106,32 @@ async fn main() -> ExitCode {
             loop {
                 match daemon_client.call(req, None).await {
                     Ok(r) => match r {
-                        ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::Success) => {
+                        ClientResponse::PamAuthenticateStepResponse {
+                            response: PamAuthResponse::Success,
+                            session_id: _,
+                        } => {
                             println!("auth success!");
                             break;
                         }
-                        ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::Denied) => {
+                        ClientResponse::PamAuthenticateStepResponse {
+                            response: PamAuthResponse::Denied,
+                            session_id: _,
+                        } => {
                             println!("auth failed!");
                             break;
                         }
-                        ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::Unknown) => {
+                        ClientResponse::PamAuthenticateStepResponse {
+                            response: PamAuthResponse::Unknown,
+                            session_id: _,
+                        } => {
                             debug!("User may need to be in allow_local_account_override");
                             println!("auth user unknown");
                             break;
                         }
-                        ClientResponse::PamAuthenticateStepResponse(PamAuthResponse::Password) => {
+                        ClientResponse::PamAuthenticateStepResponse {
+                            response: PamAuthResponse::Password,
+                            session_id,
+                        } => {
                             // Prompt for and get the password
                             let cred = match dialoguer::Password::new()
                                 .with_prompt("Enter Unix password")
@@ -133,16 +145,17 @@ async fn main() -> ExitCode {
                             };
 
                             // Setup the req for the next loop.
-                            req = ClientRequest::PamAuthenticateStep(PamAuthRequest::Password {
-                                cred,
-                            });
+                            req = ClientRequest::PamAuthenticateStep {
+                                request: PamAuthRequest::Password { cred },
+                                session_id,
+                            };
                             continue;
                         }
                         ClientResponse::Error(err) => {
                             error!("Error from kanidm-unixd: {}", err);
                             break;
                         }
-                        ClientResponse::PamAuthenticateStepResponse(_)
+                        ClientResponse::PamAuthenticateStepResponse { .. }
                         | ClientResponse::SshKeys(_)
                         | ClientResponse::NssAccounts(_)
                         | ClientResponse::NssAccount(_)

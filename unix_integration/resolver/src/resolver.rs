@@ -76,6 +76,15 @@ pub enum AuthSession {
     Denied,
 }
 
+impl AuthSession {
+    pub fn is_complete(&self) -> bool {
+        match &self {
+            Self::Success | Self::Denied => true,
+            Self::Online { .. } | Self::Offline { .. } | Self::System { .. } => false,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 /// The expiration state of a cache item
 enum ExpiryState {
