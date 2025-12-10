@@ -1,5 +1,5 @@
 [workspace.package]
-version = "1.8.3"
+version = "1.8.4"
 authors = [
     "William Brown <william@blackhats.net.au>",
     "James Hodgkinson <james@terminaloutcomes.com>",
@@ -121,19 +121,19 @@ codegen-units = 256
 # sshkey-attest = { path = "../webauthn-rs/sshkey-attest" }
 
 [workspace.dependencies]
-kanidmd_core = { path = "./server/core", version = "=1.8.3" }
-kanidmd_lib = { path = "./server/lib", version = "=1.8.3" }
-kanidmd_lib_macros = { path = "./server/lib-macros", version = "=1.8.3" }
-kanidmd_testkit = { path = "./server/testkit", version = "=1.8.3" }
-kanidm_build_profiles = { path = "./libs/profiles", version = "=1.8.3" }
-kanidm_client = { path = "./libs/client", version = "=1.8.3" }
-kanidm_lib_crypto = { path = "./libs/crypto", version = "=1.8.3" }
-kanidm_lib_file_permissions = { path = "./libs/file_permissions", version = "=1.8.3" }
-kanidm_proto = { path = "./proto", version = "=1.8.3" }
-kanidm_unix_common = { path = "./unix_integration/common", version = "=1.8.3" }
-kanidm_utils_users = { path = "./libs/users", version = "=1.8.3" }
-scim_proto = { path = "./libs/scim_proto", version = "=1.8.3" }
-sketching = { path = "./libs/sketching", version = "=1.8.3" }
+kanidmd_core = { path = "./server/core", version = "=1.8.4" }
+kanidmd_lib = { path = "./server/lib", version = "=1.8.4" }
+kanidmd_lib_macros = { path = "./server/lib-macros", version = "=1.8.4" }
+kanidmd_testkit = { path = "./server/testkit", version = "=1.8.4" }
+kanidm_build_profiles = { path = "./libs/profiles", version = "=1.8.4" }
+kanidm_client = { path = "./libs/client", version = "=1.8.4" }
+kanidm_lib_crypto = { path = "./libs/crypto", version = "=1.8.4" }
+kanidm_lib_file_permissions = { path = "./libs/file_permissions", version = "=1.8.4" }
+kanidm_proto = { path = "./proto", version = "=1.8.4" }
+kanidm_unix_common = { path = "./unix_integration/common", version = "=1.8.4" }
+kanidm_utils_users = { path = "./libs/users", version = "=1.8.4" }
+scim_proto = { path = "./libs/scim_proto", version = "=1.8.4" }
+sketching = { path = "./libs/sketching", version = "=1.8.4" }
 
 kanidm-hsm-crypto = { version = "^0.3.4" }
 
@@ -246,7 +246,7 @@ reqwest = { version = "0.12.23", default-features = false, features = [
     "rustls-tls-native-roots-no-provider",
 ] }
 rusqlite = { version = "0.37.0", features = ["array", "bundled"] }
-rustls = { version = "0.23.33", default-features = false, features = [
+rustls = { version = "0.23.35", default-features = false, features = [
     "std",
     "aws_lc_rs",
 ] }
