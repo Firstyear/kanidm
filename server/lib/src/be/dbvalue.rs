@@ -4,10 +4,10 @@ use kanidm_proto::internal::ImageType;
 use kanidm_proto::v1::OutboundMessage;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
-use time::OffsetDateTime;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::time::Duration;
+use time::OffsetDateTime;
 use url::Url;
 use uuid::Uuid;
 use webauthn_rs::prelude::{
@@ -19,6 +19,10 @@ use webauthn_rs_core::proto::{COSEKey, UserVerificationPolicy};
 use crate::repl::cid::Cid;
 use crypto_glue::{s256::Sha256Output, traits::Zeroizing};
 pub use kanidm_lib_crypto::DbPasswordV1;
+
+fn unix_epoch() -> OffsetDateTime {
+    OffsetDateTime::from_unix_timestamp(0).unwrap()
+}
 
 #[derive(Serialize, Deserialize, Debug, Ord, PartialOrd, PartialEq, Eq, Clone)]
 pub struct DbCidV1 {
@@ -212,9 +216,18 @@ pub enum DbCred {
 
     // New Formats!
     #[serde(rename = "V2Pw")]
-    V2Password { password: DbPasswordV1, uuid: Uuid, timestamp: OffsetDateTime },
+    V2Password {
+        password: DbPasswordV1,
+        uuid: Uuid,
+        #[serde(default = "unix_epoch")]
+        timestamp: OffsetDateTime,
+    },
     #[serde(rename = "V2GPw")]
-    V2GenPassword { password: DbPasswordV1, uuid: Uuid, timestamp: OffsetDateTime },
+    V2GenPassword {
+        password: DbPasswordV1,
+        uuid: Uuid,
+        timestamp: OffsetDateTime,
+    },
     #[serde(rename = "V3PwMfa")]
     V3PasswordMfa {
         password: DbPasswordV1,
@@ -222,7 +235,7 @@ pub enum DbCred {
         backup_code: Option<DbBackupCodeV1>,
         webauthn: Vec<(String, SecurityKeyV4)>,
         uuid: Uuid,
-        timestamp: OffsetDateTime
+        timestamp: OffsetDateTime,
     },
 }
 
@@ -240,8 +253,8 @@ impl DbCred {
             | DbCred::V3PasswordMfa { uuid, .. } => *uuid,
         }
     }
-    
-    pub fn timestamp(&self) -> OffsetDateTime {
+
+    pub fn last_changed_timestamp(&self) -> OffsetDateTime {
         match self {
             DbCred::V2Password { timestamp, .. }
             | DbCred::V2GenPassword { timestamp, .. }
@@ -333,8 +346,16 @@ impl fmt::Display for DbCred {
             DbCred::TmpWn { webauthn, uuid } => {
                 write!(f, "TmpWn ( w {}, u {} )", webauthn.len(), uuid)
             }
-            DbCred::V2Password { password: _, uuid, timestamp } => write!(f, "V2Pw ( u {uuid}, t {timestamp} )"),
-            DbCred::V2GenPassword { password: _, uuid, timestamp } => write!(f, "V2GPw ( u {uuid}, t {timestamp} )"),
+            DbCred::V2Password {
+                password: _,
+                uuid,
+                timestamp,
+            } => write!(f, "V2Pw ( u {uuid}, t {timestamp} )"),
+            DbCred::V2GenPassword {
+                password: _,
+                uuid,
+                timestamp,
+            } => write!(f, "V2GPw ( u {uuid}, t {timestamp} )"),
             DbCred::V2PasswordMfa {
                 password: _,
                 totp,
@@ -355,7 +376,7 @@ impl fmt::Display for DbCred {
                 backup_code,
                 webauthn,
                 uuid,
-                timestamp
+                timestamp,
             } => write!(
                 f,
                 "V3PwMfa (p true, w {}, t {}, b {}, u {}, t {})",

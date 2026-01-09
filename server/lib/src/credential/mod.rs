@@ -141,8 +141,7 @@ impl TryFrom<DbCred> for Credential {
     type Error = ();
 
     fn try_from(value: DbCred) -> Result<Self, Self::Error> {
-
-        let timestamp = value.timestamp();
+        let timestamp = value.last_changed_timestamp();
         // Work out what the policy is?
         match value {
             DbCred::V2Password {
@@ -161,7 +160,11 @@ impl TryFrom<DbCred> for Credential {
                 let v_password = Password::try_from(db_password)?;
                 let type_ = CredentialType::Password(v_password);
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid, timestamp })
+                    Ok(Credential {
+                        type_,
+                        uuid,
+                        timestamp,
+                    })
                 } else {
                     Err(())
                 }
@@ -182,7 +185,11 @@ impl TryFrom<DbCred> for Credential {
                 let v_password = Password::try_from(db_password)?;
                 let type_ = CredentialType::GeneratedPassword(v_password);
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid, timestamp })
+                    Ok(Credential {
+                        type_,
+                        uuid,
+                        timestamp,
+                    })
                 } else {
                     Err(())
                 }
@@ -234,7 +241,11 @@ impl TryFrom<DbCred> for Credential {
                     CredentialType::PasswordMfa(v_password, v_totp, v_webauthn, v_backup_code);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid, timestamp })
+                    Ok(Credential {
+                        type_,
+                        uuid,
+                        timestamp,
+                    })
                 } else {
                     Err(())
                 }
@@ -266,7 +277,11 @@ impl TryFrom<DbCred> for Credential {
                 let type_ = CredentialType::Webauthn(v_webauthn);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid, timestamp })
+                    Ok(Credential {
+                        type_,
+                        uuid,
+                        timestamp,
+                    })
                 } else {
                     Err(())
                 }
@@ -279,7 +294,11 @@ impl TryFrom<DbCred> for Credential {
                 let type_ = CredentialType::Webauthn(v_webauthn);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid, timestamp })
+                    Ok(Credential {
+                        type_,
+                        uuid,
+                        timestamp,
+                    })
                 } else {
                     Err(())
                 }
@@ -313,7 +332,11 @@ impl TryFrom<DbCred> for Credential {
                     CredentialType::PasswordMfa(v_password, v_totp, v_webauthn, v_backup_code);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid, timestamp })
+                    Ok(Credential {
+                        type_,
+                        uuid,
+                        timestamp,
+                    })
                 } else {
                     Err(())
                 }
@@ -344,7 +367,11 @@ impl TryFrom<DbCred> for Credential {
                     CredentialType::PasswordMfa(v_password, v_totp, v_webauthn, v_backup_code);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid, timestamp })
+                    Ok(Credential {
+                        type_,
+                        uuid,
+                        timestamp,
+                    })
                 } else {
                     Err(())
                 }
@@ -464,7 +491,8 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
-            timestamp: self.timestamp,
+            // Update the timestamp to signify a changed credential
+            timestamp: OffsetDateTime::now_utc(),
         })
     }
 
@@ -508,7 +536,8 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
-            timestamp: self.timestamp,
+            // Update the timestamp to signify a changed credential
+            timestamp: OffsetDateTime::now_utc(),
         })
     }
 
@@ -547,7 +576,8 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
-            timestamp: self.timestamp,
+            // Update the timestamp to signify a changed credential
+            timestamp: OffsetDateTime::now_utc(),
         }))
     }
 
@@ -633,7 +663,7 @@ impl Credential {
                 backup_code: backup_code.as_ref().map(|b| b.to_dbbackupcodev1()),
                 webauthn: map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                 uuid,
-                timestamp: self.timestamp
+                timestamp: self.timestamp,
             },
             CredentialType::Webauthn(map) => DbCred::TmpWn {
                 webauthn: map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
@@ -657,7 +687,8 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
-            timestamp: self.timestamp,
+            // Update the timestamp to signify a changed credential
+            timestamp: OffsetDateTime::now_utc(),
         }
     }
 
@@ -688,7 +719,8 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
-            timestamp: self.timestamp,
+            // Update the timestamp to signify a changed credential
+            timestamp: OffsetDateTime::now_utc(),
         }
     }
 
@@ -712,7 +744,8 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
-            timestamp: self.timestamp,
+            // Update the timestamp to signify a changed credential
+            timestamp: OffsetDateTime::now_utc(),
         }
     }
 
@@ -778,7 +811,8 @@ impl Credential {
                 ),
                 // Rotate the credential id on any change to invalidate sessions.
                 uuid: Uuid::new_v4(),
-                timestamp: self.timestamp,
+                // Update the timestamp to signify a changed credential
+                timestamp: OffsetDateTime::now_utc(),
             }),
             _ => Err(OperationError::InvalidAccountState(
                 "Non-MFA credential type".to_string(),
@@ -820,7 +854,8 @@ impl Credential {
                 type_: CredentialType::PasswordMfa(pw.clone(), totp.clone(), wan.clone(), None),
                 // Rotate the credential id on any change to invalidate sessions.
                 uuid: Uuid::new_v4(),
-                timestamp: self.timestamp
+                // Update the timestamp to signify a changed credential
+                timestamp: OffsetDateTime::now_utc(),
             }),
             _ => Err(OperationError::InvalidAccountState(
                 "Non-MFA credential type".to_string(),

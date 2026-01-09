@@ -282,6 +282,7 @@ pub const LDAP_ATTR_OBJECTCLASS: &str = "objectclass";
 pub const LDAP_ATTR_OU: &str = "ou";
 pub const LDAP_ATTR_UID: &str = "uid";
 pub const LDAP_CLASS_GROUPOFNAMES: &str = "groupofnames";
+pub const LDAP_ATTR_PWD_CHANGED_TIME: &str = "pwdChangedTime";
 
 // Rust can't deal with this being compiled out, don't try and #[cfg()] them
 pub const TEST_ATTR_NON_EXIST: &str = "non-exist";
