@@ -1956,8 +1956,8 @@ impl SchemaWriteTransaction<'_> {
         self.attributes.insert(
             Attribute::PasswordChangedTime,
             SchemaAttribute {
-                name: Attribute::PasswordChangedTime,
-                uuid: UUID_CREDENTIAL,
+                name: Attribute::PsasswordChangedTime,
+                uuid: UUID_SCHEMA_ATTR_CREDENTIAL_TIMESTAMP,
                 description: String::from("Last Credential changed time"),
                 multivalue: false,
                 unique: false,
