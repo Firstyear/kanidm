@@ -610,6 +610,7 @@ mod tests {
     use crate::credential::Credential;
     use crate::prelude::*;
     use kanidm_lib_crypto::CryptoPolicy;
+    use time::OffsetDateTime;
 
     #[qs_test]
     async fn test_modify(server: &QueryServer) {
@@ -881,7 +882,7 @@ mod tests {
 
         // Build the credential.
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, "test_password").unwrap();
+        let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
         let v_cred = Value::new_credential("primary", cred);
         assert!(v_cred.validate());
 

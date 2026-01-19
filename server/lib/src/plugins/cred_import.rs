@@ -164,6 +164,7 @@ mod tests {
     use crate::credential::{Credential, CredentialType};
     use crate::prelude::*;
     use kanidm_lib_crypto::CryptoPolicy;
+    use time::OffsetDateTime;
 
     const IMPORT_HASH: &str =
         "pbkdf2_sha256$36000$xIEozuZVAoYm$uW1b35DUKyhvQAf1mBqMvoBDcqSD06juzyO/nmyV0+w=";
@@ -260,7 +261,7 @@ mod tests {
         );
 
         let p = CryptoPolicy::minimum();
-        let c = Credential::new_password_only(&p, "password").unwrap();
+        let c = Credential::new_password_only(&p, "password", OffsetDateTime::UNIX_EPOCH).unwrap();
         ea.add_ava(
             Attribute::PrimaryCredential,
             Value::new_credential("primary", c),
@@ -304,9 +305,9 @@ mod tests {
 
         let totp = Totp::generate_secure(TOTP_DEFAULT_STEP);
         let p = CryptoPolicy::minimum();
-        let c = Credential::new_password_only(&p, "password")
+        let c = Credential::new_password_only(&p, "password", OffsetDateTime::UNIX_EPOCH)
             .unwrap()
-            .append_totp("totp".to_string(), totp);
+            .append_totp("totp".to_string(), totp, OffsetDateTime::UNIX_EPOCH);
         ea.add_ava(
             Attribute::PrimaryCredential,
             Value::new_credential("primary", c),

@@ -2547,7 +2547,7 @@ mod tests {
         pw: &str,
     ) -> Result<Uuid, OperationError> {
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, pw)?;
+        let cred = Credential::new_password_only(&p, pw, OffsetDateTime::UNIX_EPOCH)?;
         let cred_id = cred.uuid;
         let v_cred = Value::new_credential("primary", cred);
         let mut idms_write = idms.proxy_write(duration_from_epoch_now()).await.unwrap();
@@ -3088,7 +3088,7 @@ mod tests {
 
         let im_pw = "{SSHA512}JwrSUHkI7FTAfHRVR6KoFlSN0E3dmaQWARjZ+/UsShYlENOqDtFVU77HJLLrY2MuSp0jve52+pwtdVl2QUAHukQ0XUf5LDtM";
         let pw = Password::try_from(im_pw).expect("failed to parse");
-        let cred = Credential::new_from_password(pw);
+        let cred = Credential::new_from_password(pw, OffsetDateTime::UNIX_EPOCH);
         let v_cred = Value::new_credential("unix", cred);
 
         let me_posix = ModifyEvent::new_internal_invalid(
@@ -4344,7 +4344,7 @@ mod tests {
                     Attribute::PrimaryCredential,
                     Value::Cred(
                         "primary".to_string(),
-                        Credential::new_password_only(&p, "banana").unwrap()
+                        Credential::new_password_only(&p, "banana", OffsetDateTime::UNIX_EPOCH).unwrap()
                     )
                 )
             );
@@ -4354,7 +4354,7 @@ mod tests {
                     Attribute::UnixPassword,
                     Value::Cred(
                         "unix".to_string(),
-                        Credential::new_password_only(&p, "kampai").unwrap(),
+                        Credential::new_password_only(&p, "kampai", OffsetDateTime::UNIX_EPOCH).unwrap(),
                     ),
                 );
             }

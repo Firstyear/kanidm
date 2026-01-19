@@ -1775,6 +1775,7 @@ mod tests {
     use kanidm_proto::oauth2::{AccessTokenResponse, AccessTokenType, IssuedTokenType};
     use kanidm_proto::v1::{AuthAllowed, AuthIssueSession, AuthMech};
     use std::time::Duration;
+    use time::OffsetDateTime;
     use tokio::sync::mpsc::unbounded_channel as unbounded;
     use webauthn_authenticator_rs::softpasskey::SoftPasskey;
     use webauthn_authenticator_rs::WebauthnAuthenticator;
@@ -1883,7 +1884,7 @@ mod tests {
         let mut account: Account = BUILTIN_ACCOUNT_TEST_PERSON.clone().into();
         // manually load in a cred
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, "test_password").unwrap();
+        let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
         account.primary = Some(cred);
 
         let (async_tx, mut async_rx) = unbounded();
@@ -1984,7 +1985,7 @@ mod tests {
         let mut account: Account = BUILTIN_ACCOUNT_TEST_PERSON.clone().into();
         // manually load in a cred
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, "list@no3IBTyqHu$bad").unwrap();
+        let cred = Credential::new_password_only(&p, "list@no3IBTyqHu$bad", OffsetDateTime::UNIX_EPOCH).unwrap();
         account.primary = Some(cred);
 
         let (async_tx, mut async_rx) = unbounded();
@@ -2171,9 +2172,9 @@ mod tests {
         let pw_bad = "bad_password";
 
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, pw_good)
+        let cred = Credential::new_password_only(&p, pw_good, OffsetDateTime::UNIX_EPOCH)
             .unwrap()
-            .append_totp("totp".to_string(), totp);
+            .append_totp("totp".to_string(), totp, OffsetDateTime::UNIX_EPOCH);
         // add totp also
         account.primary = Some(cred);
 
@@ -2343,9 +2344,9 @@ mod tests {
         let pw_badlist = "list@no3IBTyqHu$bad";
 
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, pw_badlist)
+        let cred = Credential::new_password_only(&p, pw_badlist, OffsetDateTime::UNIX_EPOCH)
             .unwrap()
-            .append_totp("totp".to_string(), totp);
+            .append_totp("totp".to_string(), totp, OffsetDateTime::UNIX_EPOCH);
         // add totp also
         account.primary = Some(cred);
 
@@ -2667,7 +2668,7 @@ mod tests {
 
         // Now create the credential for the account.
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, pw_good)
+        let cred = Credential::new_password_only(&p, pw_good, OffsetDateTime::UNIX_EPOCH)
             .unwrap()
             .append_securitykey("soft".to_string(), wan_cred)
             .unwrap();
@@ -2870,11 +2871,11 @@ mod tests {
 
         // Now create the credential for the account.
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, pw_good)
+        let cred = Credential::new_password_only(&p, pw_good, OffsetDateTime::UNIX_EPOCH)
             .unwrap()
             .append_securitykey("soft".to_string(), wan_cred)
             .unwrap()
-            .append_totp("totp".to_string(), totp);
+            .append_totp("totp".to_string(), totp, OffsetDateTime::UNIX_EPOCH);
 
         account.primary = Some(cred);
 
@@ -3143,10 +3144,10 @@ mod tests {
 
         // add totp and backup codes also
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, pw_good)
+        let cred = Credential::new_password_only(&p, pw_good, OffsetDateTime::UNIX_EPOCH)
             .unwrap()
-            .append_totp("totp".to_string(), totp)
-            .update_backup_code(backup_codes)
+            .append_totp("totp".to_string(), totp, OffsetDateTime::UNIX_EPOCH)
+            .update_backup_code(backup_codes, OffsetDateTime::UNIX_EPOCH)
             .unwrap();
 
         account.primary = Some(cred);
@@ -3349,10 +3350,10 @@ mod tests {
         let pw_good = "test_password";
 
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, pw_good)
+        let cred = Credential::new_password_only(&p, pw_good, OffsetDateTime::UNIX_EPOCH)
             .unwrap()
-            .append_totp("totp_a".to_string(), totp_a)
-            .append_totp("totp_b".to_string(), totp_b);
+            .append_totp("totp_a".to_string(), totp_a, OffsetDateTime::UNIX_EPOCH)
+            .append_totp("totp_b".to_string(), totp_b, OffsetDateTime::UNIX_EPOCH);
         // add totp also
         account.primary = Some(cred);
 

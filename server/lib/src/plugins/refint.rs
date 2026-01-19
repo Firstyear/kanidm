@@ -1155,7 +1155,7 @@ mod tests {
         let curtime_odt = OffsetDateTime::UNIX_EPOCH + curtime;
 
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, "test_password").unwrap();
+        let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
         let cred_id = cred.uuid;
 
         // Create a user
