@@ -45,6 +45,7 @@ use rand::prelude::*;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
+use time::OffsetDateTime;
 use tokio::sync::mpsc::{
     unbounded_channel as unbounded, UnboundedReceiver as Receiver, UnboundedSender as Sender,
 };
@@ -1637,8 +1638,9 @@ impl<'a> IdmServerTransaction<'a> for IdmServerProxyReadTransaction<'a> {
 fn gen_password_mod(
     cleartext: &str,
     crypto_policy: &CryptoPolicy,
+    timestamp: OffsetDateTime,
 ) -> Result<ModifyList<ModifyInvalid>, OperationError> {
-    let new_cred = Credential::new_password_only(crypto_policy, cleartext)?;
+    let new_cred = Credential::new_password_only(crypto_policy, cleartext, timestamp)?;
     let cred_value = Value::new_credential("unix", new_cred);
     Ok(ModifyList::new_purge_and_set(
         Attribute::UnixPassword,
@@ -1650,8 +1652,9 @@ fn gen_password_upgrade_mod(
     unix_cred: &Credential,
     cleartext: &str,
     crypto_policy: &CryptoPolicy,
+    timestamp: OffsetDateTime,
 ) -> Result<Option<ModifyList<ModifyInvalid>>, OperationError> {
-    if let Some(new_cred) = unix_cred.upgrade_password(crypto_policy, cleartext)? {
+    if let Some(new_cred) = unix_cred.upgrade_password(crypto_policy, cleartext, timestamp)? {
         let cred_value = Value::new_credential("primary", new_cred);
         Ok(Some(ModifyList::new_purge_and_set(
             Attribute::UnixPassword,
@@ -1927,8 +1930,10 @@ impl IdmServerProxyWriteTransaction<'_> {
             return Err(OperationError::SystemProtectedObject);
         }
 
-        let modlist =
-            gen_password_mod(pce.cleartext.as_str(), self.crypto_policy).map_err(|e| {
+        let timestamp = OffsetDateTime::now_utc();
+
+        let modlist = gen_password_mod(pce.cleartext.as_str(), self.crypto_policy, timestamp)
+            .map_err(|e| {
                 admin_error!(?e, "Unable to generate password change modlist");
                 e
             })?;
@@ -1993,10 +1998,12 @@ impl IdmServerProxyWriteTransaction<'_> {
             .map(|s| s.to_string())
             .unwrap_or_else(password_from_random);
 
-        let ncred = Credential::new_generatedpassword_only(self.crypto_policy, &cleartext)
-            .inspect_err(|err| {
-                error!(?err, "unable to generate password modification");
-            })?;
+        let timestamp = OffsetDateTime::now_utc();
+        let ncred =
+            Credential::new_generatedpassword_only(self.crypto_policy, &cleartext, timestamp)
+                .inspect_err(|err| {
+                    error!(?err, "unable to generate password modification");
+                })?;
         let vcred = Value::new_credential("primary", ncred);
         let v_valid_from = Value::new_datetime_epoch(self.qs_write.get_curtime());
 
@@ -2097,14 +2104,22 @@ impl IdmServerProxyWriteTransaction<'_> {
 
     // -- delayed action processing --
     #[instrument(level = "debug", skip_all)]
-    fn process_pwupgrade(&mut self, pwu: &PasswordUpgrade) -> Result<(), OperationError> {
+    fn process_pwupgrade(
+        &mut self,
+        pwu: &PasswordUpgrade,
+        timestamp: OffsetDateTime,
+    ) -> Result<(), OperationError> {
         // get the account
         let account = self.target_to_account(pwu.target_uuid)?;
 
         info!(session_id = %pwu.target_uuid, "Processing password hash upgrade");
 
         let maybe_modlist = account
-            .gen_password_upgrade_mod(pwu.existing_password.as_str(), self.crypto_policy)
+            .gen_password_upgrade_mod(
+                pwu.existing_password.as_str(),
+                self.crypto_policy,
+                timestamp,
+            )
             .map_err(|e| {
                 admin_error!("Unable to generate password mod {:?}", e);
                 e
@@ -2122,7 +2137,11 @@ impl IdmServerProxyWriteTransaction<'_> {
     }
 
     #[instrument(level = "debug", skip_all)]
-    fn process_unixpwupgrade(&mut self, pwu: &UnixPasswordUpgrade) -> Result<(), OperationError> {
+    fn process_unixpwupgrade(
+        &mut self,
+        pwu: &UnixPasswordUpgrade,
+        timestamp: OffsetDateTime,
+    ) -> Result<(), OperationError> {
         info!(session_id = %pwu.target_uuid, "Processing unix password hash upgrade");
 
         let account = self
@@ -2150,8 +2169,12 @@ impl IdmServerProxyWriteTransaction<'_> {
             return Ok(());
         };
 
-        let maybe_modlist =
-            gen_password_upgrade_mod(cred, pwu.existing_password.as_str(), self.crypto_policy)?;
+        let maybe_modlist = gen_password_upgrade_mod(
+            cred,
+            pwu.existing_password.as_str(),
+            self.crypto_policy,
+            timestamp,
+        )?;
 
         match maybe_modlist {
             Some(modlist) => self.qs_write.internal_modify(
@@ -2265,11 +2288,12 @@ impl IdmServerProxyWriteTransaction<'_> {
     pub fn process_delayedaction(
         &mut self,
         da: &DelayedAction,
-        _ct: Duration,
+        ct: Duration,
     ) -> Result<(), OperationError> {
+        let timestamp = OffsetDateTime::UNIX_EPOCH + ct;
         match da {
-            DelayedAction::PwUpgrade(pwu) => self.process_pwupgrade(pwu),
-            DelayedAction::UnixPwUpgrade(upwu) => self.process_unixpwupgrade(upwu),
+            DelayedAction::PwUpgrade(pwu) => self.process_pwupgrade(pwu, timestamp),
+            DelayedAction::UnixPwUpgrade(upwu) => self.process_unixpwupgrade(upwu, timestamp),
             DelayedAction::WebauthnCounterIncrement(wci) => self.process_webauthncounterinc(wci),
             DelayedAction::BackupCodeRemoval(bcr) => self.process_backupcoderemoval(bcr),
             DelayedAction::AuthSessionRecord(asr) => self.process_authsessionrecord(asr),

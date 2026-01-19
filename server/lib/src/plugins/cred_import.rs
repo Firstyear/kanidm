@@ -3,6 +3,8 @@ use std::convert::TryFrom;
 use std::iter::once;
 use std::sync::Arc;
 
+use time::OffsetDateTime;
+
 use crate::credential::{Credential, Password};
 use crate::event::{CreateEvent, ModifyEvent};
 use crate::plugins::Plugin;
@@ -21,36 +23,36 @@ impl Plugin for CredImport {
         skip_all
     )]
     fn pre_create_transform(
-        _qs: &mut QueryServerWriteTransaction,
+        qs: &mut QueryServerWriteTransaction,
         cand: &mut Vec<Entry<EntryInvalid, EntryNew>>,
         _ce: &CreateEvent,
     ) -> Result<(), OperationError> {
-        Self::modify_inner(cand)
+        Self::modify_inner(cand, qs.get_curtime_odt())
     }
 
     #[instrument(level = "debug", name = "password_import_pre_modify", skip_all)]
     fn pre_modify(
-        _qs: &mut QueryServerWriteTransaction,
+        qs: &mut QueryServerWriteTransaction,
         _pre_cand: &[Arc<EntrySealedCommitted>],
         cand: &mut Vec<Entry<EntryInvalid, EntryCommitted>>,
         _me: &ModifyEvent,
     ) -> Result<(), OperationError> {
-        Self::modify_inner(cand)
+        Self::modify_inner(cand, qs.get_curtime_odt())
     }
 
     #[instrument(level = "debug", name = "password_import_pre_batch_modify", skip_all)]
     fn pre_batch_modify(
-        _qs: &mut QueryServerWriteTransaction,
+        qs: &mut QueryServerWriteTransaction,
         _pre_cand: &[Arc<EntrySealedCommitted>],
         cand: &mut Vec<Entry<EntryInvalid, EntryCommitted>>,
         _me: &BatchModifyEvent,
     ) -> Result<(), OperationError> {
-        Self::modify_inner(cand)
+        Self::modify_inner(cand, qs.get_curtime_odt())
     }
 }
 
 impl CredImport {
-    fn modify_inner<T: Clone>(cand: &mut [Entry<EntryInvalid, T>]) -> Result<(), OperationError> {
+    fn modify_inner<T: Clone>(cand: &mut [Entry<EntryInvalid, T>], timestamp: OffsetDateTime) -> Result<(), OperationError> {
         cand.iter_mut().try_for_each(|entry| {
             // PASSWORD IMPORT
             if let Some(vs) = entry.pop_ava(Attribute::PasswordImport) {
@@ -72,7 +74,7 @@ impl CredImport {
                 // does the entry have a primary cred?
                 match entry.get_ava_single_credential(Attribute::PrimaryCredential) {
                     Some(c) => {
-                        let c = c.update_password(pw);
+                        let c = c.update_password(pw, timestamp);
                         entry.set_ava(
                             &Attribute::PrimaryCredential,
                             once(Value::new_credential("primary", c)),
@@ -80,7 +82,7 @@ impl CredImport {
                     }
                     None => {
                         // just set it then!
-                        let c = Credential::new_from_password(pw);
+                        let c = Credential::new_from_password(pw, timestamp);
                         entry.set_ava(
                             &Attribute::PrimaryCredential,
                             once(Value::new_credential("primary", c)),
@@ -101,7 +103,7 @@ impl CredImport {
 
                 if let Some(c) = entry.get_ava_single_credential(Attribute::PrimaryCredential) {
                     let c = totps.iter().fold(c.clone(), |acc, (label, totp)| {
-                        acc.append_totp(label.clone(), totp.clone())
+                        acc.append_totp(label.clone(), totp.clone(), timestamp)
                     });
                     entry.set_ava(
                         &Attribute::PrimaryCredential,
@@ -144,7 +146,7 @@ impl CredImport {
                 })?;
 
                 // Unix pw's aren't like primary, we can just splat them here.
-                let c = Credential::new_from_password(pw);
+                let c = Credential::new_from_password(pw, timestamp);
                 entry.set_ava(
                     &Attribute::UnixPassword,
                     once(Value::new_credential("primary", c)),

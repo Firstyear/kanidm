@@ -391,26 +391,28 @@ impl Credential {
     pub fn new_password_only(
         policy: &CryptoPolicy,
         cleartext: &str,
+        timestamp: OffsetDateTime,
     ) -> Result<Self, OperationError> {
         Password::new(policy, cleartext)
             .map_err(|e| {
                 error!(crypto_err = ?e);
                 OperationError::CryptographyError
             })
-            .map(Self::new_from_password)
+            .map(|password| Self::new_from_password(password, timestamp))
     }
 
     /// Create a new credential that contains a CredentialType::GeneratedPassword
     pub fn new_generatedpassword_only(
         policy: &CryptoPolicy,
         cleartext: &str,
+        timestamp: OffsetDateTime,
     ) -> Result<Self, OperationError> {
         Password::new(policy, cleartext)
             .map_err(|e| {
                 error!(crypto_err = ?e);
                 OperationError::CryptographyError
             })
-            .map(Self::new_from_generatedpassword)
+            .map(|password| Self::new_from_generatedpassword(password, timestamp))
     }
 
     /// Update the state of the Password on this credential, if a password is present. If possible
@@ -419,19 +421,21 @@ impl Credential {
         &self,
         policy: &CryptoPolicy,
         cleartext: &str,
+        timestamp: OffsetDateTime
     ) -> Result<Self, OperationError> {
         Password::new(policy, cleartext)
             .map_err(|e| {
                 error!(crypto_err = ?e);
                 OperationError::CryptographyError
             })
-            .map(|pw| self.update_password(pw))
+            .map(|pw| self.update_password(pw, timestamp))
     }
 
     pub fn upgrade_password(
         &self,
         policy: &CryptoPolicy,
         cleartext: &str,
+        timestamp: OffsetDateTime
     ) -> Result<Option<Self>, OperationError> {
         let valid = self.password_ref().and_then(|pw| {
             pw.verify(cleartext).map_err(|e| {
@@ -449,7 +453,7 @@ impl Credential {
             // Note, during update_password we normally rotate the uuid, here we
             // set it back to our current value. This is because we are just
             // updating the hash value, not actually changing the password itself.
-            let mut cred = self.update_password(pw);
+            let mut cred = self.update_password(pw, timestamp);
             cred.uuid = self.uuid;
 
             Ok(Some(cred))
@@ -672,7 +676,7 @@ impl Credential {
         }
     }
 
-    pub(crate) fn update_password(&self, pw: Password) -> Self {
+    pub(crate) fn update_password(&self, pw: Password, timestamp: OffsetDateTime) -> Self {
         let type_ = match &self.type_ {
             CredentialType::Password(_) | CredentialType::GeneratedPassword(_) => {
                 CredentialType::Password(pw)
@@ -688,12 +692,12 @@ impl Credential {
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
             // Update the timestamp to signify a changed credential
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp,
         }
     }
 
     // We don't make totp accessible from outside the crate for now.
-    pub(crate) fn append_totp(&self, label: String, totp: Totp) -> Self {
+    pub(crate) fn append_totp(&self, label: String, totp: Totp, timestamp: OffsetDateTime) -> Self {
         let type_ = match &self.type_ {
             CredentialType::Password(pw) | CredentialType::GeneratedPassword(pw) => {
                 CredentialType::PasswordMfa(
@@ -720,11 +724,11 @@ impl Credential {
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
             // Update the timestamp to signify a changed credential
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp,
         }
     }
 
-    pub(crate) fn remove_totp(&self, label: &str) -> Self {
+    pub(crate) fn remove_totp(&self, label: &str, timestamp: OffsetDateTime) -> Self {
         let type_ = match &self.type_ {
             CredentialType::PasswordMfa(pw, totp, wan, backup_code) => {
                 let mut totp = totp.clone();
@@ -745,7 +749,7 @@ impl Credential {
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
             // Update the timestamp to signify a changed credential
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp,
         }
     }
 
@@ -756,19 +760,19 @@ impl Credential {
         }
     }
 
-    pub(crate) fn new_from_generatedpassword(pw: Password) -> Self {
+    pub(crate) fn new_from_generatedpassword(pw: Password, timestamp: OffsetDateTime) -> Self {
         Credential {
             type_: CredentialType::GeneratedPassword(pw),
             uuid: Uuid::new_v4(),
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp,
         }
     }
 
-    pub(crate) fn new_from_password(pw: Password) -> Self {
+    pub(crate) fn new_from_password(pw: Password, timestamp: OffsetDateTime) -> Self {
         Credential {
             type_: CredentialType::Password(pw),
             uuid: Uuid::new_v4(),
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp,
         }
     }
 
@@ -800,6 +804,7 @@ impl Credential {
     pub(crate) fn update_backup_code(
         &self,
         backup_codes: BackupCodes,
+        timestamp: OffsetDateTime,
     ) -> Result<Self, OperationError> {
         match &self.type_ {
             CredentialType::PasswordMfa(pw, totp, wan, _) => Ok(Credential {
@@ -812,7 +817,7 @@ impl Credential {
                 // Rotate the credential id on any change to invalidate sessions.
                 uuid: Uuid::new_v4(),
                 // Update the timestamp to signify a changed credential
-                timestamp: OffsetDateTime::now_utc(),
+                timestamp,
             }),
             _ => Err(OperationError::InvalidAccountState(
                 "Non-MFA credential type".to_string(),
@@ -848,14 +853,14 @@ impl Credential {
         }
     }
 
-    pub(crate) fn remove_backup_code(&self) -> Result<Self, OperationError> {
+    pub(crate) fn remove_backup_code(&self, timestamp: OffsetDateTime) -> Result<Self, OperationError> {
         match &self.type_ {
             CredentialType::PasswordMfa(pw, totp, wan, _) => Ok(Credential {
                 type_: CredentialType::PasswordMfa(pw.clone(), totp.clone(), wan.clone(), None),
                 // Rotate the credential id on any change to invalidate sessions.
                 uuid: Uuid::new_v4(),
                 // Update the timestamp to signify a changed credential
-                timestamp: OffsetDateTime::now_utc(),
+                timestamp,
             }),
             _ => Err(OperationError::InvalidAccountState(
                 "Non-MFA credential type".to_string(),
