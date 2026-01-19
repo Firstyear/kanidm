@@ -880,3 +880,151 @@ impl CredentialType {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::credential::totp::{Totp, TotpAlgo, TotpDigits, TotpError, TOTP_DEFAULT_STEP};
+    use crate::credential::Credential;
+    use kanidm_lib_crypto::{CryptoPolicy, Password};
+
+    #[test]
+    fn test_credential_timestamp_updated_on_totp_append() {
+        let policy = CryptoPolicy::minimum();
+        let pw = Password::new(&policy, "test_password").expect("Failed to create password");
+        let original_cred = Credential::new_from_password(pw);
+        let original_timestamp = original_cred.timestamp;
+
+        // Sleep a tiny bit to ensure timestamp difference
+        std::thread::sleep(Duration::from_millis(1));
+
+        let totp = Totp::generate_secure(TOTP_DEFAULT_STEP);
+        let updated_cred = original_cred.append_totp("test_totp".to_string(), totp);
+
+        // Verify timestamp was updated
+        assert_ne!(original_timestamp, updated_cred.timestamp);
+        assert!(updated_cred.timestamp > original_timestamp);
+
+        // Verify UUID was rotated (security feature)
+        assert_ne!(original_cred.uuid, updated_cred.uuid);
+    }
+
+    #[test]
+    fn test_credential_timestamp_updated_on_totp_remove() {
+        let policy = CryptoPolicy::minimum();
+        let pw = Password::new(&policy, "test_password").expect("Failed to create password");
+        let cred = Credential::new_from_password(pw);
+
+        let totp = Totp::generate_secure(TOTP_DEFAULT_STEP);
+        let cred_with_totp = cred.append_totp("test_totp".to_string(), totp);
+        let timestamp_after_append = cred_with_totp.timestamp;
+
+        // Sleep a tiny bit to ensure timestamp difference
+        std::thread::sleep(Duration::from_millis(1));
+
+        let cred_removed = cred_with_totp.remove_totp("test_totp");
+
+        // Verify timestamp was updated during removal
+        assert_ne!(timestamp_after_append, cred_removed.timestamp);
+        assert!(cred_removed.timestamp > timestamp_after_append);
+
+        // Verify UUID was rotated
+        assert_ne!(cred_with_totp.uuid, cred_removed.uuid);
+    }
+
+    #[test]
+    fn test_credential_timestamp_updated_on_password_change() {
+        let policy = CryptoPolicy::minimum();
+        let original_cred = Credential::new_password_only(&policy, "original_password")
+            .expect("Failed to create credential");
+        let original_timestamp = original_cred.timestamp;
+
+        // Sleep a tiny bit to ensure timestamp difference
+        std::thread::sleep(Duration::from_millis(1));
+
+        let updated_cred = original_cred
+            .set_password(&policy, "new_password")
+            .expect("Failed to update password");
+
+        // Verify timestamp was updated
+        assert_ne!(original_timestamp, updated_cred.timestamp);
+        assert!(updated_cred.timestamp > original_timestamp);
+
+        // Verify UUID was rotated
+        assert_ne!(original_cred.uuid, updated_cred.uuid);
+    }
+
+    #[test]
+    fn test_credential_timestamp_preserved_on_password_upgrade() {
+        let policy = CryptoPolicy::minimum();
+        let original_cred = Credential::new_password_only(&policy, "test_password")
+            .expect("Failed to create credential");
+        let original_timestamp = original_cred.timestamp;
+        let original_uuid = original_cred.uuid;
+
+        // Sleep a tiny bit to ensure we can detect if timestamp changes
+        std::thread::sleep(Duration::from_millis(1));
+
+        // Password upgrade should preserve UUID and timestamp since it's just
+        // updating the hash algorithm, not actually changing the password
+        let maybe_upgraded = original_cred
+            .upgrade_password(&policy, "test_password")
+            .expect("Failed to upgrade password");
+
+        if let Some(upgraded_cred) = maybe_upgraded {
+            // UUID should be preserved during upgrade (unlike other operations)
+            assert_eq!(original_uuid, upgraded_cred.uuid);
+            // Timestamp should be updated to reflect the upgrade
+            assert!(upgraded_cred.timestamp >= original_timestamp);
+        }
+    }
+
+    #[test]
+    fn test_credential_timestamp_on_mfa_operations() {
+        use crate::credential::BackupCodes;
+        use hashbrown::HashSet;
+
+        let policy = CryptoPolicy::minimum();
+        let pw = Password::new(&policy, "test_password").expect("Failed to create password");
+        let cred = Credential::new_from_password(pw);
+
+        // Add TOTP to make it MFA
+        let totp = Totp::generate_secure(TOTP_DEFAULT_STEP);
+        let mfa_cred = cred.append_totp("test_totp".to_string(), totp);
+        let mfa_timestamp = mfa_cred.timestamp;
+
+        // Sleep to ensure timestamp difference
+        std::thread::sleep(Duration::from_millis(1));
+
+        // Add backup codes
+        let backup_codes =
+            BackupCodes::new(HashSet::from(["code1".to_string(), "code2".to_string()]));
+        let cred_with_backup = mfa_cred
+            .update_backup_code(backup_codes)
+            .expect("Failed to add backup codes");
+
+        // Verify timestamp was updated
+        assert_ne!(mfa_timestamp, cred_with_backup.timestamp);
+        assert!(cred_with_backup.timestamp > mfa_timestamp);
+
+        // Verify UUID was rotated
+        assert_ne!(mfa_cred.uuid, cred_with_backup.uuid);
+
+        // Sleep to ensure timestamp difference
+        std::thread::sleep(Duration::from_millis(1));
+
+        // Remove backup codes
+        let cred_removed_backup = cred_with_backup
+            .remove_backup_code()
+            .expect("Failed to remove backup codes");
+
+        // Verify timestamp was updated again
+        assert_ne!(cred_with_backup.timestamp, cred_removed_backup.timestamp);
+        assert!(cred_removed_backup.timestamp > cred_with_backup.timestamp);
+
+        // Verify UUID was rotated again
+        assert_ne!(cred_with_backup.uuid, cred_removed_backup.uuid);
+    }
+}
