@@ -55,6 +55,7 @@ use kanidm_proto::v1::Entry as ProtoEntry;
 use ldap3_proto::simple::{LdapPartialAttribute, LdapSearchResultEntry};
 use openssl::ec::EcKey;
 use openssl::pkey::{Private, Public};
+use time::format_description::well_known::Iso8601;
 use std::cmp::Ordering;
 pub use std::collections::BTreeSet as Set;
 use std::collections::{BTreeMap as Map, BTreeMap, BTreeSet};
@@ -2565,6 +2566,26 @@ impl Entry<EntryReduced, EntryCommitted> {
                     ATTR_HOME_DIRECTORY => Some(LdapPartialAttribute {
                         atype: ATTR_HOME_DIRECTORY.to_string(),
                         vals: vec![format!("/home/{}", self.get_uuid()).into_bytes()],
+                    }),
+                    LDAP_ATTR_PWD_CHANGED_TIME => Some(LdapPartialAttribute {
+                        atype: LDAP_ATTR_PWD_CHANGED_TIME.to_string(),
+                        vals: vec![format!(
+                            "{}Z",
+                            {
+                                // This whole block is stupid. We are operating on the EntryReduced when actually
+                                // we want to be resolving the entirety of the EntryConmitted (including ACP) since
+                                // we want to fall back creds to determine which timestamp should be shown.
+                                // So how the do this???
+                                self.get_ava()
+                                    .get(&Attribute::PrimaryCredential)
+                                    .and_then(|cred| cred.to_credential_single())
+                                    .map(|cred| cred.timestamp())
+                                    .unwrap_or(OffsetDateTime::UNIX_EPOCH)
+                                    .format(&Iso8601::DEFAULT)
+                                    .unwrap_or_else(|_| "???".to_string()) // The hell do we do if serializing the timestamp fails????
+                            }
+                        )
+                        .into_bytes()],
                     }),
                     _ => attr_map.get(kani_a).map(|pvs| LdapPartialAttribute {
                         atype: ldap_a.to_string(),

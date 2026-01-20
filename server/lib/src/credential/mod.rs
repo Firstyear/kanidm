@@ -390,6 +390,10 @@ impl TryFrom<DbCred> for Credential {
 }
 
 impl Credential {
+    pub fn timestamp(&self) -> OffsetDateTime {
+        self.timestamp
+    }
+
     /// Create a new credential that contains a CredentialType::Password
     pub fn new_password_only(
         policy: &CryptoPolicy,
@@ -468,11 +472,11 @@ impl Credential {
     /// Extend this credential with another alternate webauthn credential. This is especially
     /// useful for `PasswordMfa` where you can have many webauthn credentials and a password
     /// generally so that one is a backup.
+    #[cfg(test)] // This method isn't used outside of tests, Should we keep the cfg?
     pub fn append_securitykey(
         &self,
         label: String,
-        cred: SecurityKey,
-        timestamp: OffsetDateTime
+        cred: SecurityKey
     ) -> Result<Self, OperationError> {
         let type_ = match &self.type_ {
             CredentialType::Password(pw) | CredentialType::GeneratedPassword(pw) => {
@@ -499,7 +503,7 @@ impl Credential {
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
             // Update the timestamp to signify a changed credential
-            timestamp,
+            timestamp: self.timestamp,
         })
     }
 
@@ -951,7 +955,7 @@ mod tests {
         // Password upgrade should preserve UUID and timestamp since it's just
         // updating the hash algorithm, not actually changing the password
         let maybe_upgraded = original_cred
-            .upgrade_password(&CryptoPolicy::minimum(), "test_password", OffsetDateTime::UNIX_EPOCH + Duration::from_millis(10))
+            .upgrade_password(&CryptoPolicy::minimum(), "test_password")
             .expect("Failed to upgrade password");
 
         if let Some(upgraded_cred) = maybe_upgraded {
