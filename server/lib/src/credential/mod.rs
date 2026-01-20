@@ -141,7 +141,10 @@ impl TryFrom<DbCred> for Credential {
     type Error = ();
 
     fn try_from(value: DbCred) -> Result<Self, Self::Error> {
+        // We need to retrieve the timestamp here since not all DbCreds have one.
+        // All V1 creds will fall back to a default
         let timestamp = value.last_changed_timestamp();
+
         // Work out what the policy is?
         match value {
             DbCred::V2Password {
@@ -431,14 +434,10 @@ impl Credential {
             .map(|pw| self.update_password(pw, timestamp))
     }
 
-    // I added the timestamp updating to this since it seemed the right thing to do
-    // But since the password itself should remain unaffected this doesn't technically constitute
-    // an update of the password.
     pub fn upgrade_password(
         &self,
         policy: &CryptoPolicy,
-        cleartext: &str,
-        timestamp: OffsetDateTime
+        cleartext: &str
     ) -> Result<Option<Self>, OperationError> {
         let valid = self.password_ref().and_then(|pw| {
             pw.verify(cleartext).map_err(|e| {
@@ -456,7 +455,7 @@ impl Credential {
             // Note, during update_password we normally rotate the uuid, here we
             // set it back to our current value. This is because we are just
             // updating the hash value, not actually changing the password itself.
-            let mut cred = self.update_password(pw, timestamp);
+            let mut cred = self.update_password(pw, self.timestamp);
             cred.uuid = self.uuid;
 
             Ok(Some(cred))
@@ -473,6 +472,7 @@ impl Credential {
         &self,
         label: String,
         cred: SecurityKey,
+        timestamp: OffsetDateTime
     ) -> Result<Self, OperationError> {
         let type_ = match &self.type_ {
             CredentialType::Password(pw) | CredentialType::GeneratedPassword(pw) => {
@@ -499,12 +499,12 @@ impl Credential {
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
             // Update the timestamp to signify a changed credential
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp,
         })
     }
 
     /// Remove a webauthn token identified by `label` from this Credential.
-    pub fn remove_securitykey(&self, label: &str) -> Result<Self, OperationError> {
+    pub fn remove_securitykey(&self, label: &str, timestamp: OffsetDateTime) -> Result<Self, OperationError> {
         let type_ = match &self.type_ {
             CredentialType::Password(_)
             | CredentialType::GeneratedPassword(_)
@@ -544,7 +544,7 @@ impl Credential {
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
             // Update the timestamp to signify a changed credential
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp,
         })
     }
 
@@ -553,7 +553,7 @@ impl Credential {
     /// counter value to prevent certain classes of replay attacks.
     pub fn update_webauthn_properties(
         &self,
-        auth_result: &AuthenticationResult,
+        auth_result: &AuthenticationResult
     ) -> Result<Option<Self>, OperationError> {
         let type_ = match &self.type_ {
             CredentialType::Password(_pw) | CredentialType::GeneratedPassword(_pw) => {
@@ -583,8 +583,7 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
-            // Update the timestamp to signify a changed credential
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp: self.timestamp,
         }))
     }
 

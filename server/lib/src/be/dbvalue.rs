@@ -226,6 +226,7 @@ pub enum DbCred {
     V2GenPassword {
         password: DbPasswordV1,
         uuid: Uuid,
+        #[serde(default = "unix_epoch")]
         timestamp: OffsetDateTime,
     },
     #[serde(rename = "V3PwMfa")]
@@ -235,6 +236,7 @@ pub enum DbCred {
         backup_code: Option<DbBackupCodeV1>,
         webauthn: Vec<(String, SecurityKeyV4)>,
         uuid: Uuid,
+        #[serde(default = "unix_epoch")]
         timestamp: OffsetDateTime,
     },
 }
@@ -259,6 +261,7 @@ impl DbCred {
             DbCred::V2Password { timestamp, .. }
             | DbCred::V2GenPassword { timestamp, .. }
             | DbCred::V3PasswordMfa { timestamp, .. } => *timestamp,
+            // For v1 creds, we have no timestamp, so return *some* ;p fixed time in the past.
             _ => OffsetDateTime::from_unix_timestamp(932964162_i64).unwrap(),
         }
     }
