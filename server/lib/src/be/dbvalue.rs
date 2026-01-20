@@ -21,7 +21,7 @@ use crypto_glue::{s256::Sha256Output, traits::Zeroizing};
 pub use kanidm_lib_crypto::DbPasswordV1;
 
 fn unix_epoch() -> OffsetDateTime {
-    OffsetDateTime::from_unix_timestamp(0).unwrap()
+    OffsetDateTime::UNIX_EPOCH
 }
 
 #[derive(Serialize, Deserialize, Debug, Ord, PartialOrd, PartialEq, Eq, Clone)]
