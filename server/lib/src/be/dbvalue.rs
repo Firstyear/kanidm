@@ -262,7 +262,7 @@ impl DbCred {
             | DbCred::V2GenPassword { timestamp, .. }
             | DbCred::V3PasswordMfa { timestamp, .. } => *timestamp,
             // For v1 creds, we have no timestamp, so return *some* ;p fixed time in the past.
-            _ => OffsetDateTime::from_unix_timestamp(932964162_i64).unwrap(),
+            _ => OffsetDateTime::from_unix_timestamp(932964162_i64).unwrap_or(OffsetDateTime::UNIX_EPOCH),
         }
     }
 }
