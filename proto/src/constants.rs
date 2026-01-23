@@ -163,7 +163,7 @@ pub const ATTR_NAME: &str = "name";
 pub const ATTR_NO_INDEX: &str = "no-index";
 pub const ATTR_NSACCOUNTLOCK: &str = "nsaccountlock";
 pub const ATTR_NSUNIQUEID: &str = "nsuniqueid";
-pub const ATTR_PWD_CHANGED_TIME: &str = "pwdChangedTime";
+pub const ATTR_PWD_CHANGED_TIME: &str = "pwd_changed_time";
 
 pub const ATTR_OAUTH2_ALLOW_INSECURE_CLIENT_DISABLE_PKCE: &str =
     "oauth2_allow_insecure_client_disable_pkce";
