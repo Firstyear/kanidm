@@ -1467,6 +1467,8 @@ impl IdmServerProxyWriteTransaction<'_> {
         let (mut modlist, session, session_token) =
             self.credential_update_commit_common(cust, ct)?;
 
+        let timestamp = self.qs_write.get_curtime_odt();
+
         // Can we actually proceed?
         let can_commit = session.can_commit();
         if !can_commit.0 {
@@ -1536,12 +1538,47 @@ impl IdmServerProxyWriteTransaction<'_> {
             ));
         };
 
+        match session.unixcred_state {
+            CredentialState::DeleteOnly | CredentialState::Modifiable => {
+                modlist.push_mod(Modify::Purged(Attribute::UnixPassword));
+                modlist.push_mod(Modify::Purged(Attribute::PasswordChangedTime));
+
+                if let Some(ncred) = &session.unixcred {
+                    let vcred = Value::new_credential("unix", ncred.clone());
+                    modlist.push_mod(Modify::Present(Attribute::UnixPassword, vcred));
+                    modlist.push_mod(Modify::Present(
+                        Attribute::PasswordChangedTime,
+                        Value::DateTime(timestamp),
+                    ));
+                }
+            }
+            CredentialState::PolicyDeny => {
+                modlist.push_mod(Modify::Purged(Attribute::UnixPassword));
+            }
+            CredentialState::AccessDeny => {}
+        };
+
         match session.primary_state {
             CredentialState::Modifiable => {
                 modlist.push_mod(Modify::Purged(Attribute::PrimaryCredential));
                 if let Some(ncred) = &session.primary {
                     let vcred = Value::new_credential("primary", ncred.clone());
                     modlist.push_mod(Modify::Present(Attribute::PrimaryCredential, vcred));
+
+                    // We are relying on the unix cred update having cleared the PasswordChangdTime
+                    // If there is no unix password and this user can log in via primary fallback
+                    // we need to update the timesatmp whn the primary cred is updated
+                    if session.unixcred.is_none()
+                        && session
+                            .resolved_account_policy
+                            .allow_primary_cred_fallback()
+                            == Some(true)
+                    {
+                        modlist.push_mod(Modify::Present(
+                            Attribute::PasswordChangedTime,
+                            Value::DateTime(timestamp),
+                        ));
+                    }
                 };
             }
             CredentialState::DeleteOnly | CredentialState::PolicyDeny => {
@@ -1583,20 +1620,6 @@ impl IdmServerProxyWriteTransaction<'_> {
                 modlist.push_mod(Modify::Purged(Attribute::AttestedPasskeys));
             }
             // CredentialState::Disabled |
-            CredentialState::AccessDeny => {}
-        };
-
-        match session.unixcred_state {
-            CredentialState::DeleteOnly | CredentialState::Modifiable => {
-                modlist.push_mod(Modify::Purged(Attribute::UnixPassword));
-                if let Some(ncred) = &session.unixcred {
-                    let vcred = Value::new_credential("unix", ncred.clone());
-                    modlist.push_mod(Modify::Present(Attribute::UnixPassword, vcred));
-                }
-            }
-            CredentialState::PolicyDeny => {
-                modlist.push_mod(Modify::Purged(Attribute::UnixPassword));
-            }
             CredentialState::AccessDeny => {}
         };
 
