@@ -1059,6 +1059,7 @@ pub static SCHEMA_CLASS_PERSON_DL8: LazyLock<SchemaClass> = LazyLock::new(|| Sch
         Attribute::Mail,
         Attribute::LegalName,
         Attribute::ApplicationPassword,
+        Attribute::PasswordChangedTime,
     ],
     systemmust: vec![Attribute::Name],
     systemexcludes: vec![
