@@ -578,7 +578,7 @@ impl UnixdConfig {
                 HomeStrategyV2::BindMount => HomeStrategy::BindMount,
                 #[cfg(not(target_os = "linux"))]
                 HomeStrategyV2::BindMount => {
-                    warn!("home_strateg: bind_mount not supported on this platform - falling back to symlink!");
+                    warn!("Bind mounts not supported on this operating system - falling back to symlink for home directories");
                     HomeStrategy::Symlink
                 }
             },
