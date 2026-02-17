@@ -242,12 +242,19 @@ fn create_dir_path(hd_mount_path: &Path, info: &HomeDirectoryInfo) -> Result<(),
 
 #[cfg(target_os = "linux")]
 fn home_alias_update_bind_mount(alias_path: &Path, hd_mount_path: &Path) -> Result<(), String> {
-    // If the alias_path is a symlink, remove it
-    // TODO: what if it exsits and is not a symlink?
-    if alias_path.exists() && alias_path.is_symlink() {
-        if let Err(e) = remove_file(alias_path) {
-            error!("Unable to remove existing symlink at {alias_path:?}");
-            return Err(format!("{e:?}"));
+    if alias_path.exists() {
+        if alias_path.is_symlink() {
+            // If the alias_path is a symlink, remove it
+            if let Err(e) = remove_file(alias_path) {
+                error!("Unable to remove existing symlink at {alias_path:?}");
+                return Err(format!("{e:?}"));
+            }
+        } else if !alias_path.is_dir() {
+            // If it's anything other than a directory, we don't proceed.
+            error!("A non-directory item already exists at {alias_path:?}");
+            return Err(format!(
+                "A non-directory item already exists at {alias_path:?}"
+            ));
         }
     }
 
@@ -266,9 +273,9 @@ fn home_alias_update_bind_mount(alias_path: &Path, hd_mount_path: &Path) -> Resu
 
     // Remove conflicting mount if it exists:
     let mismatching_mount = current_mounts.iter().find(|m| {
-        m.mount_point == alias_path
-            && m.mount_source != Some(hd_mount_path.to_string_lossy().to_string())
+        m.mount_point == alias_path && m.mount_source.as_ref().map(Path::new) != Some(hd_mount_path)
     });
+
     if let Some(m) = mismatching_mount {
         nix::mount::umount(&m.mount_point).map_err(|e| {
             format!(
@@ -280,8 +287,7 @@ fn home_alias_update_bind_mount(alias_path: &Path, hd_mount_path: &Path) -> Resu
 
     // If mount point exists and is already correctly mounted, we are done
     if current_mounts.iter().any(|m| {
-        m.mount_point == alias_path
-            && m.mount_source == Some(hd_mount_path.to_string_lossy().to_string())
+        m.mount_point == alias_path && m.mount_source.as_ref().map(Path::new) != Some(hd_mount_path)
     }) {
         return Ok(());
     }

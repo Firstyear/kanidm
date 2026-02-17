@@ -57,13 +57,14 @@ version = '2'
 
 # home_attr = "uuid"
 
+
 # Controls the prefix that will be prepended to the home name when using mounted home directories from
 # a location that is outside of them `home_prefix`. Must end with a trailing `/`. If unset then home
 # directories will be created in `home_prefix`.
 #
 # This is option is useful when implementing a networked home directory layout. A common implementation
 # is to configure a networked filesystem that contains user directories mounted at `/u/` (eg /u/$user_uuid)
-# and then symlink the mounted directory into /home/$user_name when the user logs in. This can be accomplished
+# and then link the mounted directory into /home/$user_name when the user logs in. This can be accomplished
 # with a configuration that includes the following:
 #
 # > home_attr = "uuid"
@@ -81,7 +82,7 @@ version = '2'
 # Default: unset
 #
 # home_mount_prefix = "/u/"
-#
+
 
 # The default token attribute used for generating symlinks pointing to the user's home
 # directory. If set, this will become the value of the home path to nss calls. It is recommended you
@@ -91,6 +92,24 @@ version = '2'
 # Default: spn
 
 # home_alias = "spn"
+
+
+# The strategy used for management of home directory aliases. If the home_attr is "uuid" and the
+# home_alias is "name", then the system needs to redirect from /home/<name> to /home/<uuid> in some
+# transparent manner. This allows configuration of that method.
+#
+# * symlink: creates a symlink from the alias to the stable home directory path. Some applications
+#            may encounter issues with the strategy (e.g. cargo, snap).
+#
+# (linux only)
+# * bind_mount: bind mounts the alias directory to the stable path. This requires modification of
+#               .service file on linux to grant the needed permissions. For more details, see:
+#               systemctl edit kanidm-unixd-tasks.service
+#
+
+# Default: symlink
+
+# home_strategy = "symlink"
 
 
 # Controls if home directories should be prepopulated with the contents of `/etc/skel`

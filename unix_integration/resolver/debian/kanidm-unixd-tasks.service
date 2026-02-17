@@ -23,19 +23,43 @@ ExecStart=/usr/sbin/kanidm_unixd_tasks
 Restart=always
 RestartSec=30
 
-CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_SYS_ADMIN
+CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH
 # SystemCallFilter=@aio @basic-io @chown @file-system @io-event @network-io @sync
-# ProtectSystem=strict
-# ReadWritePaths=/home /run/kanidm-unixd
+ProtectSystem=strict
+ReadWritePaths=/home /run/kanidm-unixd
 RestrictAddressFamilies=AF_UNIX
 NoNewPrivileges=true
-# PrivateTmp=true
-# PrivateDevices=true
-# PrivateNetwork=true
-# ProtectHostname=true
-# ProtectClock=true
-# ProtectKernelTunables=true
-# ProtectKernelModules=true
-# ProtectKernelLogs=true
-# ProtectControlGroups=true
+PrivateTmp=true
+PrivateDevices=true
+PrivateNetwork=true
+ProtectHostname=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
 MemoryDenyWriteExecute=true
+
+# ##########################################################################
+# # If you are using home_strategy = "bind_mount", you must edit the service
+# # and place the below contents uncommented to grant the necesary
+# # permissions to kanidm-unixd-tasks to allow mounting of home directories.
+#
+# # systemctl edit kanidm-unixd-tasks.service
+#
+# CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_SYS_ADMIN
+# ProtectSystem=false
+# ReadWritePaths=/
+# RestrictAddressFamilies=AF_UNIX
+# NoNewPrivileges=false
+# PrivateTmp=false
+# PrivateDevices=false
+# PrivateNetwork=false
+# ProtectHostname=false
+# ProtectClock=false
+# ProtectKernelTunables=false
+# ProtectKernelModules=false
+# ProtectKernelLogs=false
+# ProtectControlGroups=false
+# MemoryDenyWriteExecute=true
+
