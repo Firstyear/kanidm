@@ -257,13 +257,14 @@ pub static SCHEMA_ATTR_UNIX_PASSWORD: LazyLock<SchemaAttribute> =
         ..Default::default()
     });
 
-pub static SCHEMA_ATTR_PASSWORD_CHANGED_TIME: LazyLock<SchemaAttribute> = LazyLock::new(|| SchemaAttribute {
-    uuid: UUID_SCHEMA_ATTR_PASSWORD_CHANGED_TIME,
-    name: Attribute::PasswordChangedTime,
-    description: "The time when the password was last changed.".to_string(),
-    syntax: SyntaxType::DateTime,
-    ..Default::default()
-});
+pub static SCHEMA_ATTR_PASSWORD_CHANGED_TIME: LazyLock<SchemaAttribute> =
+    LazyLock::new(|| SchemaAttribute {
+        uuid: UUID_SCHEMA_ATTR_PASSWORD_CHANGED_TIME,
+        name: Attribute::PasswordChangedTime,
+        description: "The time when the password was last changed.".to_string(),
+        syntax: SyntaxType::DateTime,
+        ..Default::default()
+    });
 
 pub static SCHEMA_ATTR_NSUNIQUEID: LazyLock<SchemaAttribute> = LazyLock::new(|| SchemaAttribute {
     uuid: UUID_SCHEMA_ATTR_NSUNIQUEID,

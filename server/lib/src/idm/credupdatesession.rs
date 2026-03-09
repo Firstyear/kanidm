@@ -5407,9 +5407,7 @@ mod tests {
         assert!(!c_status.can_commit);
     }
 
-    async fn get_testperson_password_changed_time(
-        idms: &IdmServer,
-    ) -> Option<OffsetDateTime> {
+    async fn get_testperson_password_changed_time(idms: &IdmServer) -> Option<OffsetDateTime> {
         let mut txn = idms.proxy_read().await.unwrap();
         let entry = txn
             .qs_read
@@ -5587,7 +5585,6 @@ mod tests {
         // Sanity check
         assert!(get_testperson_password_changed_time(idms).await.is_none());
 
-
         // Setting Passkey with no Password Credentials causes EPOCH to be set
         let cutxn = idms.cred_update_transaction().await.unwrap();
         let origin = cutxn.get_origin().clone();
@@ -5627,7 +5624,6 @@ mod tests {
         let pwd_changed_1 = get_testperson_password_changed_time(idms)
             .await
             .expect("PasswordChangedTime should be set after first update");
-
 
         let ct2 = Duration::from_secs(TEST_CURRENT_TIME + 2000);
 

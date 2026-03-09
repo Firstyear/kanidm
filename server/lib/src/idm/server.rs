@@ -1849,7 +1849,7 @@ impl IdmServerProxyWriteTransaction<'_> {
     pub(crate) fn set_account_password(
         &mut self,
         pce: &PasswordChangeEvent,
-        ct: OffsetDateTime
+        ct: OffsetDateTime,
     ) -> Result<(), OperationError> {
         let account = self.target_to_account(pce.target)?;
 
@@ -2760,12 +2760,16 @@ mod tests {
     #[idm_test]
     async fn test_idm_simple_password_reset(idms: &IdmServer, _idms_delayed: &IdmServerDelayed) {
         let pce = PasswordChangeEvent::new_internal(UUID_ADMIN, TEST_PASSWORD);
-        
+
         let ct = duration_from_epoch_now();
 
         let mut idms_prox_write = idms.proxy_write(ct).await.unwrap();
-        assert!(idms_prox_write.set_account_password(&pce, OffsetDateTime::UNIX_EPOCH + ct).is_ok());
-        assert!(idms_prox_write.set_account_password(&pce, OffsetDateTime::UNIX_EPOCH + ct).is_ok());
+        assert!(idms_prox_write
+            .set_account_password(&pce, OffsetDateTime::UNIX_EPOCH + ct)
+            .is_ok());
+        assert!(idms_prox_write
+            .set_account_password(&pce, OffsetDateTime::UNIX_EPOCH + ct)
+            .is_ok());
         assert!(idms_prox_write.commit().is_ok());
     }
 
@@ -2779,7 +2783,9 @@ mod tests {
         let ct = duration_from_epoch_now();
 
         let mut idms_prox_write = idms.proxy_write(ct).await.unwrap();
-        assert!(idms_prox_write.set_account_password(&pce, OffsetDateTime::UNIX_EPOCH + ct).is_err());
+        assert!(idms_prox_write
+            .set_account_password(&pce, OffsetDateTime::UNIX_EPOCH + ct)
+            .is_err());
         assert!(idms_prox_write.commit().is_ok());
     }
 

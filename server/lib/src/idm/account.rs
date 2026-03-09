@@ -585,13 +585,12 @@ impl Account {
         &self,
         cleartext: &str,
         crypto_policy: &CryptoPolicy,
-        ct: OffsetDateTime
+        ct: OffsetDateTime,
     ) -> Result<ModifyList<ModifyInvalid>, OperationError> {
         match &self.primary {
             // Change the cred
             Some(primary) => {
-                let ncred =
-                    primary.set_password(crypto_policy, cleartext, ct)?;
+                let ncred = primary.set_password(crypto_policy, cleartext, ct)?;
                 let vcred = Value::new_credential("primary", ncred);
                 Ok(ModifyList::new_purge_and_set(
                     Attribute::PrimaryCredential,

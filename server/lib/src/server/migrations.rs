@@ -1419,10 +1419,9 @@ mod tests {
             .expect("Unable to load test person");
 
         // sanity check
-        assert!(
-            user.get_ava_single_datetime(Attribute::PasswordChangedTime)
-                .is_none()
-        );
+        assert!(user
+            .get_ava_single_datetime(Attribute::PasswordChangedTime)
+            .is_none());
 
         write_txn.commit().expect("Unable to commit");
 
