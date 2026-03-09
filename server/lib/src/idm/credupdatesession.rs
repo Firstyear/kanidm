@@ -1487,6 +1487,9 @@ impl IdmServerProxyWriteTransaction<'_> {
 
         // Setup mods for the various bits. We always assert an *exact* state.
 
+        let entry = self.qs_write.internal_search_uuid(session.account.uuid)?;
+        let account = Account::try_from_entry_rw(entry.as_ref(), &mut self.qs_write)?;
+
         // IF an intent was used on this session, AND that intent is not in our
         // session state as an exact match, FAIL the commit. Move the intent to "Consumed".
         //
@@ -1497,9 +1500,6 @@ impl IdmServerProxyWriteTransaction<'_> {
 
         // If an intent token was used, remove it's former value, and add it as consumed.
         if let Some(intent_token_id) = &session.intent_token_id {
-            let entry = self.qs_write.internal_search_uuid(session.account.uuid)?;
-            let account = Account::try_from_entry_rw(entry.as_ref(), &mut self.qs_write)?;
-
             let max_ttl = match account.credential_update_intent_tokens.get(intent_token_id) {
                 Some(IntentTokenState::InProgress {
                     max_ttl,
@@ -1538,25 +1538,37 @@ impl IdmServerProxyWriteTransaction<'_> {
             ));
         };
 
+        let mut should_update_pwd_changed: Option<bool> = None;
+
         match session.unixcred_state {
             CredentialState::DeleteOnly | CredentialState::Modifiable => {
                 modlist.push_mod(Modify::Purged(Attribute::UnixPassword));
-                modlist.push_mod(Modify::Purged(Attribute::PasswordChangedTime));
+
+                should_update_pwd_changed = Some(true);
 
                 if let Some(ncred) = &session.unixcred {
                     let vcred = Value::new_credential("unix", ncred.clone());
                     modlist.push_mod(Modify::Present(Attribute::UnixPassword, vcred));
-                    modlist.push_mod(Modify::Present(
-                        Attribute::PasswordChangedTime,
-                        Value::DateTime(timestamp),
-                    ));
                 }
             }
             CredentialState::PolicyDeny => {
+                should_update_pwd_changed = Some(true);
                 modlist.push_mod(Modify::Purged(Attribute::UnixPassword));
             }
             CredentialState::AccessDeny => {}
         };
+
+        // If we cannot fall back *or* the unix credential is still set but not updated
+        if should_update_pwd_changed == None
+            && (session
+                .resolved_account_policy
+                .allow_primary_cred_fallback()
+                != Some(true)
+                || account.unix_extn().map(|ext| ext.ucred()).is_some())
+        {
+            // then we don't need to update the password changed time
+            should_update_pwd_changed = Some(false);
+        }
 
         match session.primary_state {
             CredentialState::Modifiable => {
@@ -1565,27 +1577,23 @@ impl IdmServerProxyWriteTransaction<'_> {
                     let vcred = Value::new_credential("primary", ncred.clone());
                     modlist.push_mod(Modify::Present(Attribute::PrimaryCredential, vcred));
 
-                    // We are relying on the unix cred update having cleared the PasswordChangdTime
-                    // If there is no unix password and this user can log in via primary fallback
-                    // we need to update the timesatmp whn the primary cred is updated
-                    if session.unixcred.is_none()
-                        && session
-                            .resolved_account_policy
-                            .allow_primary_cred_fallback()
-                            == Some(true)
-                    {
-                        modlist.push_mod(Modify::Present(
-                            Attribute::PasswordChangedTime,
-                            Value::DateTime(timestamp),
-                        ));
-                    }
+                    should_update_pwd_changed.get_or_insert(true);
                 };
             }
             CredentialState::DeleteOnly | CredentialState::PolicyDeny => {
                 modlist.push_mod(Modify::Purged(Attribute::PrimaryCredential));
+                should_update_pwd_changed.get_or_insert(true);
             }
             CredentialState::AccessDeny => {}
         };
+
+        if should_update_pwd_changed == Some(true) {
+            modlist.push_mod(Modify::Purged(Attribute::PasswordChangedTime));
+            modlist.push_mod(Modify::Present(
+                Attribute::PasswordChangedTime,
+                Value::DateTime(timestamp),
+            ));
+        }
 
         match session.passkeys_state {
             CredentialState::DeleteOnly | CredentialState::Modifiable => {
