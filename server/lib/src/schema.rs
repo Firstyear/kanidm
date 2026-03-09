@@ -1952,22 +1952,6 @@ impl SchemaWriteTransaction<'_> {
                 syntax: SyntaxType::Utf8String,
             },
         );
-
-        self.attributes.insert(
-            Attribute::PasswordChangedTime,
-            SchemaAttribute {
-                name: Attribute::PasswordChangedTime,
-                uuid: UUID_SCHEMA_ATTR_CREDENTIAL_TIMESTAMP,
-                description: String::from("Last Credential changed time"),
-                multivalue: false,
-                unique: false,
-                phantom: true,
-                sync_allowed: false,
-                replicated: Replicated::False,
-                indexed: false,
-                syntax: SyntaxType::DateTime,
-            },
-        );
         // end LDAP masking phantoms
 
         // THIS IS FOR SYSTEM CRITICAL INTERNAL SCHEMA ONLY
