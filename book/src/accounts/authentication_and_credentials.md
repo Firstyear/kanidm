@@ -153,3 +153,9 @@ kanidm reauth -D william
 >
 > During reauthentication an account must use the same credential that was used to initially authenticate to the
 > session. The reauth flow will not allow any other credentials to be used!
+
+## Password Changed Time
+
+kanidm keeps track of the last time a password (relevant to logging in via LDAP/POSIX) was changed. This follows the [PrimaryCredFallback](../account_policy#setting-primary-credential-fallback) Policy, so if no Unix Credential is present, the last changed time of the Primary Credential will be used (if applicable).
+
+This is credential will also be provided through LDAP via the `pwdChangedTime` attribute and is required for external applications to be informed on when a user has changed their credentials and needs to be re-authenticated. 
