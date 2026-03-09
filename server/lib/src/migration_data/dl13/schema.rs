@@ -1031,13 +1031,13 @@ pub static SCHEMA_ATTR_S256: LazyLock<SchemaAttribute> = LazyLock::new(|| Schema
     ..Default::default()
 });
 
-pub static ref SCHEMA_ATTR_PASSWORD_CHANGED_TIME: SchemaAttribute = SchemaAttribute {
+pub static SCHEMA_ATTR_PASSWORD_CHANGED_TIME: LazyLock<SchemaAttribute> = LazyLock::new(|| SchemaAttribute {
     uuid: UUID_SCHEMA_ATTR_PASSWORD_CHANGED_TIME,
     name: Attribute::PasswordChangedTime,
     description: "The time when the password was last changed.".to_string(),
     syntax: SyntaxType::DateTime,
     ..Default::default()
-};
+});
 
 // === classes ===
 pub static SCHEMA_CLASS_PERSON_DL8: LazyLock<SchemaClass> = LazyLock::new(|| SchemaClass {
