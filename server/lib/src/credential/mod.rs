@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use hashbrown::{HashMap as Map, HashSet};
 use kanidm_proto::internal::{CredentialDetail, CredentialDetailType, OperationError};
+use time::OffsetDateTime;
 use uuid::Uuid;
 use webauthn_rs::prelude::{AuthenticationResult, Passkey, SecurityKey};
 use webauthn_rs_core::proto::{Credential as WebauthnCredential, CredentialV3};
@@ -87,6 +88,7 @@ pub struct Credential {
     pub(crate) uuid: Uuid,
     // TODO #59: Add auth policy IE validUntil, lock state ...
     // locked: bool
+    timestamp: OffsetDateTime,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -139,11 +141,14 @@ impl TryFrom<DbCred> for Credential {
     type Error = ();
 
     fn try_from(value: DbCred) -> Result<Self, Self::Error> {
+
+        let timestamp = value.timestamp();
         // Work out what the policy is?
         match value {
             DbCred::V2Password {
                 password: db_password,
                 uuid,
+                ..
             }
             | DbCred::Pw {
                 password: Some(db_password),
@@ -156,7 +161,7 @@ impl TryFrom<DbCred> for Credential {
                 let v_password = Password::try_from(db_password)?;
                 let type_ = CredentialType::Password(v_password);
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid })
+                    Ok(Credential { type_, uuid, timestamp })
                 } else {
                     Err(())
                 }
@@ -164,6 +169,7 @@ impl TryFrom<DbCred> for Credential {
             DbCred::V2GenPassword {
                 password: db_password,
                 uuid,
+                ..
             }
             | DbCred::GPw {
                 password: Some(db_password),
@@ -176,7 +182,7 @@ impl TryFrom<DbCred> for Credential {
                 let v_password = Password::try_from(db_password)?;
                 let type_ = CredentialType::GeneratedPassword(v_password);
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid })
+                    Ok(Credential { type_, uuid, timestamp })
                 } else {
                     Err(())
                 }
@@ -228,7 +234,7 @@ impl TryFrom<DbCred> for Credential {
                     CredentialType::PasswordMfa(v_password, v_totp, v_webauthn, v_backup_code);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid })
+                    Ok(Credential { type_, uuid, timestamp })
                 } else {
                     Err(())
                 }
@@ -260,7 +266,7 @@ impl TryFrom<DbCred> for Credential {
                 let type_ = CredentialType::Webauthn(v_webauthn);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid })
+                    Ok(Credential { type_, uuid, timestamp })
                 } else {
                     Err(())
                 }
@@ -273,7 +279,7 @@ impl TryFrom<DbCred> for Credential {
                 let type_ = CredentialType::Webauthn(v_webauthn);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid })
+                    Ok(Credential { type_, uuid, timestamp })
                 } else {
                     Err(())
                 }
@@ -307,7 +313,7 @@ impl TryFrom<DbCred> for Credential {
                     CredentialType::PasswordMfa(v_password, v_totp, v_webauthn, v_backup_code);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid })
+                    Ok(Credential { type_, uuid, timestamp })
                 } else {
                     Err(())
                 }
@@ -318,6 +324,7 @@ impl TryFrom<DbCred> for Credential {
                 backup_code,
                 webauthn: db_webauthn,
                 uuid,
+                ..
             } => {
                 let v_password = Password::try_from(db_password)?;
 
@@ -337,7 +344,7 @@ impl TryFrom<DbCred> for Credential {
                     CredentialType::PasswordMfa(v_password, v_totp, v_webauthn, v_backup_code);
 
                 if type_.is_valid() {
-                    Ok(Credential { type_, uuid })
+                    Ok(Credential { type_, uuid, timestamp })
                 } else {
                     Err(())
                 }
@@ -457,6 +464,7 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
+            timestamp: self.timestamp,
         })
     }
 
@@ -500,6 +508,7 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
+            timestamp: self.timestamp,
         })
     }
 
@@ -538,6 +547,7 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
+            timestamp: self.timestamp,
         }))
     }
 
@@ -607,10 +617,12 @@ impl Credential {
             CredentialType::Password(pw) => DbCred::V2Password {
                 password: pw.to_dbpasswordv1(),
                 uuid,
+                timestamp: self.timestamp,
             },
             CredentialType::GeneratedPassword(pw) => DbCred::V2GenPassword {
                 password: pw.to_dbpasswordv1(),
                 uuid,
+                timestamp: self.timestamp,
             },
             CredentialType::PasswordMfa(pw, totp, map, backup_code) => DbCred::V3PasswordMfa {
                 password: pw.to_dbpasswordv1(),
@@ -621,6 +633,7 @@ impl Credential {
                 backup_code: backup_code.as_ref().map(|b| b.to_dbbackupcodev1()),
                 webauthn: map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                 uuid,
+                timestamp: self.timestamp
             },
             CredentialType::Webauthn(map) => DbCred::TmpWn {
                 webauthn: map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
@@ -644,6 +657,7 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
+            timestamp: self.timestamp,
         }
     }
 
@@ -674,6 +688,7 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
+            timestamp: self.timestamp,
         }
     }
 
@@ -697,6 +712,7 @@ impl Credential {
             type_,
             // Rotate the credential id on any change to invalidate sessions.
             uuid: Uuid::new_v4(),
+            timestamp: self.timestamp,
         }
     }
 
@@ -711,6 +727,7 @@ impl Credential {
         Credential {
             type_: CredentialType::GeneratedPassword(pw),
             uuid: Uuid::new_v4(),
+            timestamp: OffsetDateTime::now_utc(),
         }
     }
 
@@ -718,6 +735,7 @@ impl Credential {
         Credential {
             type_: CredentialType::Password(pw),
             uuid: Uuid::new_v4(),
+            timestamp: OffsetDateTime::now_utc(),
         }
     }
 
@@ -760,6 +778,7 @@ impl Credential {
                 ),
                 // Rotate the credential id on any change to invalidate sessions.
                 uuid: Uuid::new_v4(),
+                timestamp: self.timestamp,
             }),
             _ => Err(OperationError::InvalidAccountState(
                 "Non-MFA credential type".to_string(),
@@ -781,6 +800,7 @@ impl Credential {
                             // Don't rotate uuid here since this is a consumption of a backup
                             // code.
                             uuid: self.uuid,
+                            timestamp: self.timestamp,
                         })
                     }
                     _ => Err(OperationError::InvalidAccountState(
@@ -800,6 +820,7 @@ impl Credential {
                 type_: CredentialType::PasswordMfa(pw.clone(), totp.clone(), wan.clone(), None),
                 // Rotate the credential id on any change to invalidate sessions.
                 uuid: Uuid::new_v4(),
+                timestamp: self.timestamp
             }),
             _ => Err(OperationError::InvalidAccountState(
                 "Non-MFA credential type".to_string(),

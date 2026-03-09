@@ -814,6 +814,7 @@ pub(crate) fn ldap_all_vattrs() -> Vec<String> {
         ATTR_UID.to_string(),
         ATTR_GECOS.to_string(),
         ATTR_HOME_DIRECTORY.to_string(),
+        ATTR_PWD_CHANGED_TIME.to_string(),
     ]
 }
 
@@ -845,6 +846,7 @@ pub(crate) fn ldap_vattr_map(input: &str) -> Option<&str> {
         ATTR_LDAP_SSHPUBLICKEY => Some(ATTR_SSH_PUBLICKEY), // no-underscore -> underscore
         ATTR_UIDNUMBER => Some(ATTR_GIDNUMBER),             // yes this is intentional
         ATTR_HOME_DIRECTORY => Some(ATTR_UUID),
+        ATTR_PWD_CHANGED_TIME => Some(ATTR_PWD_CHANGED_TIME),
         _ => None,
     }
 }
