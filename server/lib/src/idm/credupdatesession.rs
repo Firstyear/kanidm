@@ -1467,8 +1467,6 @@ impl IdmServerProxyWriteTransaction<'_> {
         let (mut modlist, session, session_token) =
             self.credential_update_commit_common(cust, ct)?;
 
-        let timestamp = self.qs_write.get_curtime_odt();
-
         // Can we actually proceed?
         let can_commit = session.can_commit();
         if !can_commit.0 {
