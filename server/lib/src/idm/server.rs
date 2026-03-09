@@ -1849,12 +1849,13 @@ impl IdmServerProxyWriteTransaction<'_> {
     pub(crate) fn set_account_password(
         &mut self,
         pce: &PasswordChangeEvent,
+        ct: OffsetDateTime
     ) -> Result<(), OperationError> {
         let account = self.target_to_account(pce.target)?;
 
         // Get the modifications we *want* to perform.
         let modlist = account
-            .gen_password_mod(pce.cleartext.as_str(), self.crypto_policy)
+            .gen_password_mod(pce.cleartext.as_str(), self.crypto_policy, ct)
             .map_err(|e| {
                 admin_error!("Failed to generate password mod {:?}", e);
                 e
@@ -2759,10 +2760,12 @@ mod tests {
     #[idm_test]
     async fn test_idm_simple_password_reset(idms: &IdmServer, _idms_delayed: &IdmServerDelayed) {
         let pce = PasswordChangeEvent::new_internal(UUID_ADMIN, TEST_PASSWORD);
+        
+        let ct = duration_from_epoch_now();
 
-        let mut idms_prox_write = idms.proxy_write(duration_from_epoch_now()).await.unwrap();
-        assert!(idms_prox_write.set_account_password(&pce).is_ok());
-        assert!(idms_prox_write.set_account_password(&pce).is_ok());
+        let mut idms_prox_write = idms.proxy_write(ct).await.unwrap();
+        assert!(idms_prox_write.set_account_password(&pce, OffsetDateTime::UNIX_EPOCH + ct).is_ok());
+        assert!(idms_prox_write.set_account_password(&pce, OffsetDateTime::UNIX_EPOCH + ct).is_ok());
         assert!(idms_prox_write.commit().is_ok());
     }
 
@@ -2773,8 +2776,10 @@ mod tests {
     ) {
         let pce = PasswordChangeEvent::new_internal(UUID_ANONYMOUS, TEST_PASSWORD);
 
-        let mut idms_prox_write = idms.proxy_write(duration_from_epoch_now()).await.unwrap();
-        assert!(idms_prox_write.set_account_password(&pce).is_err());
+        let ct = duration_from_epoch_now();
+
+        let mut idms_prox_write = idms.proxy_write(ct).await.unwrap();
+        assert!(idms_prox_write.set_account_password(&pce, OffsetDateTime::UNIX_EPOCH + ct).is_err());
         assert!(idms_prox_write.commit().is_ok());
     }
 
