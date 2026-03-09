@@ -2103,20 +2103,14 @@ impl IdmServerProxyWriteTransaction<'_> {
 
     // -- delayed action processing --
     #[instrument(level = "debug", skip_all)]
-    fn process_pwupgrade(
-        &mut self,
-        pwu: &PasswordUpgrade
-    ) -> Result<(), OperationError> {
+    fn process_pwupgrade(&mut self, pwu: &PasswordUpgrade) -> Result<(), OperationError> {
         // get the account
         let account = self.target_to_account(pwu.target_uuid)?;
 
         info!(session_id = %pwu.target_uuid, "Processing password hash upgrade");
 
         let maybe_modlist = account
-            .gen_password_upgrade_mod(
-                pwu.existing_password.as_str(),
-                self.crypto_policy,
-            )
+            .gen_password_upgrade_mod(pwu.existing_password.as_str(), self.crypto_policy)
             .map_err(|e| {
                 admin_error!("Unable to generate password mod {:?}", e);
                 e
@@ -2134,10 +2128,7 @@ impl IdmServerProxyWriteTransaction<'_> {
     }
 
     #[instrument(level = "debug", skip_all)]
-    fn process_unixpwupgrade(
-        &mut self,
-        pwu: &UnixPasswordUpgrade,
-    ) -> Result<(), OperationError> {
+    fn process_unixpwupgrade(&mut self, pwu: &UnixPasswordUpgrade) -> Result<(), OperationError> {
         info!(session_id = %pwu.target_uuid, "Processing unix password hash upgrade");
 
         let account = self
@@ -2165,11 +2156,8 @@ impl IdmServerProxyWriteTransaction<'_> {
             return Ok(());
         };
 
-        let maybe_modlist = gen_password_upgrade_mod(
-            cred,
-            pwu.existing_password.as_str(),
-            self.crypto_policy,
-        )?;
+        let maybe_modlist =
+            gen_password_upgrade_mod(cred, pwu.existing_password.as_str(), self.crypto_policy)?;
 
         match maybe_modlist {
             Some(modlist) => self.qs_write.internal_modify(
@@ -4338,7 +4326,8 @@ mod tests {
                     Attribute::PrimaryCredential,
                     Value::Cred(
                         "primary".to_string(),
-                        Credential::new_password_only(&p, "banana", OffsetDateTime::UNIX_EPOCH).unwrap()
+                        Credential::new_password_only(&p, "banana", OffsetDateTime::UNIX_EPOCH)
+                            .unwrap()
                     )
                 )
             );
@@ -4348,7 +4337,8 @@ mod tests {
                     Attribute::UnixPassword,
                     Value::Cred(
                         "unix".to_string(),
-                        Credential::new_password_only(&p, "kampai", OffsetDateTime::UNIX_EPOCH).unwrap(),
+                        Credential::new_password_only(&p, "kampai", OffsetDateTime::UNIX_EPOCH)
+                            .unwrap(),
                     ),
                 );
             }

@@ -210,7 +210,8 @@ mod tests {
         let curtime_odt = OffsetDateTime::UNIX_EPOCH + curtime;
 
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
+        let cred =
+            Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
         let cred_id = cred.uuid;
 
         let exp_curtime = curtime + Duration::from_secs(60);
@@ -320,7 +321,8 @@ mod tests {
         let curtime_odt = OffsetDateTime::UNIX_EPOCH + curtime;
 
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
+        let cred =
+            Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
         let cred_id = cred.uuid;
 
         // Set exp to gracewindow.
@@ -499,7 +501,8 @@ mod tests {
         let exp_curtime = curtime + AUTH_TOKEN_GRACE_WINDOW;
 
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
+        let cred =
+            Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
         let cred_id = cred.uuid;
 
         // Create a user
@@ -800,7 +803,8 @@ mod tests {
         let curtime_odt = OffsetDateTime::UNIX_EPOCH + curtime;
 
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
+        let cred =
+            Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
         let cred_id = cred.uuid;
 
         // Create a user

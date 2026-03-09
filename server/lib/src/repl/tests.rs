@@ -3241,7 +3241,8 @@ async fn test_repl_increment_session_new(server_a: &QueryServer, server_b: &Quer
     let t_uuid = Uuid::new_v4();
 
     let p = CryptoPolicy::minimum();
-    let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH + ct).unwrap();
+    let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH + ct)
+        .unwrap();
     let cred_id = cred.uuid;
 
     let e1 = entry_init!(

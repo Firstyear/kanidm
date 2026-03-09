@@ -2103,7 +2103,9 @@ impl IdmServerCredUpdateTransaction<'_> {
                     let ncred = session
                         .primary
                         .as_ref()
-                        .map(|cred| cred.append_totp(label.to_string(), totp_token.clone(), timestamp))
+                        .map(|cred| {
+                            cred.append_totp(label.to_string(), totp_token.clone(), timestamp)
+                        })
                         .ok_or_else(|| {
                             admin_error!("A TOTP was added, but no primary credential stub exists");
                             OperationError::InvalidState
@@ -2196,18 +2198,18 @@ impl IdmServerCredUpdateTransaction<'_> {
             OperationError::InvalidState
         })?;
         trace!(?session);
-        
+
         if !matches!(session.primary_state, CredentialState::Modifiable) {
             error!("Session does not have permission to modify primary credential");
             return Err(OperationError::AccessDenied);
         };
-        
+
         if !matches!(session.mfaregstate, MfaRegState::None) {
             admin_info!("Invalid TOTP state, another update is in progress");
             return Err(OperationError::InvalidState);
         }
-        
-        let timestamp = OffsetDateTime::UNIX_EPOCH + ct; 
+
+        let timestamp = OffsetDateTime::UNIX_EPOCH + ct;
 
         let ncred = session
             .primary
@@ -2601,14 +2603,14 @@ impl IdmServerCredUpdateTransaction<'_> {
             OperationError::InvalidState
         })?;
         trace!(?session);
-        
+
         if !matches!(session.unixcred_state, CredentialState::Modifiable) {
             error!("Session does not have permission to modify unix credential");
             return Err(OperationError::AccessDenied);
         };
 
-        let timestamp =  OffsetDateTime::UNIX_EPOCH + ct;
-        
+        let timestamp = OffsetDateTime::UNIX_EPOCH + ct;
+
         self.check_password_quality(
             pw,
             &session.resolved_account_policy,

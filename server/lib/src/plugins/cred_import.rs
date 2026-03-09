@@ -52,7 +52,10 @@ impl Plugin for CredImport {
 }
 
 impl CredImport {
-    fn modify_inner<T: Clone>(cand: &mut [Entry<EntryInvalid, T>], timestamp: OffsetDateTime) -> Result<(), OperationError> {
+    fn modify_inner<T: Clone>(
+        cand: &mut [Entry<EntryInvalid, T>],
+        timestamp: OffsetDateTime,
+    ) -> Result<(), OperationError> {
         cand.iter_mut().try_for_each(|entry| {
             // PASSWORD IMPORT
             if let Some(vs) = entry.pop_ava(Attribute::PasswordImport) {

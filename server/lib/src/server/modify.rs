@@ -882,7 +882,8 @@ mod tests {
 
         // Build the credential.
         let p = CryptoPolicy::minimum();
-        let cred = Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
+        let cred =
+            Credential::new_password_only(&p, "test_password", OffsetDateTime::UNIX_EPOCH).unwrap();
         let v_cred = Value::new_credential("primary", cred);
         assert!(v_cred.validate());
 

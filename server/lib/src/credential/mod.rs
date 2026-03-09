@@ -428,7 +428,7 @@ impl Credential {
         &self,
         policy: &CryptoPolicy,
         cleartext: &str,
-        timestamp: OffsetDateTime
+        timestamp: OffsetDateTime,
     ) -> Result<Self, OperationError> {
         Password::new(policy, cleartext)
             .map_err(|e| {
@@ -441,7 +441,7 @@ impl Credential {
     pub fn upgrade_password(
         &self,
         policy: &CryptoPolicy,
-        cleartext: &str
+        cleartext: &str,
     ) -> Result<Option<Self>, OperationError> {
         let valid = self.password_ref().and_then(|pw| {
             pw.verify(cleartext).map_err(|e| {
@@ -476,7 +476,7 @@ impl Credential {
     pub fn append_securitykey(
         &self,
         label: String,
-        cred: SecurityKey
+        cred: SecurityKey,
     ) -> Result<Self, OperationError> {
         let type_ = match &self.type_ {
             CredentialType::Password(pw) | CredentialType::GeneratedPassword(pw) => {
@@ -508,7 +508,11 @@ impl Credential {
     }
 
     /// Remove a webauthn token identified by `label` from this Credential.
-    pub fn remove_securitykey(&self, label: &str, timestamp: OffsetDateTime) -> Result<Self, OperationError> {
+    pub fn remove_securitykey(
+        &self,
+        label: &str,
+        timestamp: OffsetDateTime,
+    ) -> Result<Self, OperationError> {
         let type_ = match &self.type_ {
             CredentialType::Password(_)
             | CredentialType::GeneratedPassword(_)
@@ -557,7 +561,7 @@ impl Credential {
     /// counter value to prevent certain classes of replay attacks.
     pub fn update_webauthn_properties(
         &self,
-        auth_result: &AuthenticationResult
+        auth_result: &AuthenticationResult,
     ) -> Result<Option<Self>, OperationError> {
         let type_ = match &self.type_ {
             CredentialType::Password(_pw) | CredentialType::GeneratedPassword(_pw) => {
@@ -859,7 +863,10 @@ impl Credential {
         }
     }
 
-    pub(crate) fn remove_backup_code(&self, timestamp: OffsetDateTime) -> Result<Self, OperationError> {
+    pub(crate) fn remove_backup_code(
+        &self,
+        timestamp: OffsetDateTime,
+    ) -> Result<Self, OperationError> {
         match &self.type_ {
             CredentialType::PasswordMfa(pw, totp, wan, _) => Ok(Credential {
                 type_: CredentialType::PasswordMfa(pw.clone(), totp.clone(), wan.clone(), None),
@@ -887,7 +894,6 @@ impl CredentialType {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -899,12 +905,17 @@ mod tests {
 
     #[test]
     fn test_credential_timestamp_updated_on_totp_append() {
-        let pw = Password::new(&CryptoPolicy::minimum(), "test_password").expect("Failed to create password");
+        let pw = Password::new(&CryptoPolicy::minimum(), "test_password")
+            .expect("Failed to create password");
         let original_cred = Credential::new_from_password(pw, OffsetDateTime::UNIX_EPOCH);
         let original_timestamp = original_cred.timestamp;
 
         let totp = Totp::generate_secure(TOTP_DEFAULT_STEP);
-        let updated_cred = original_cred.append_totp("test_totp".to_string(), totp, OffsetDateTime::UNIX_EPOCH + Duration::from_millis(10));
+        let updated_cred = original_cred.append_totp(
+            "test_totp".to_string(),
+            totp,
+            OffsetDateTime::UNIX_EPOCH + Duration::from_millis(10),
+        );
 
         // Verify timestamp was updated
         assert!(updated_cred.timestamp > original_timestamp);
@@ -913,16 +924,22 @@ mod tests {
 
     #[test]
     fn test_credential_timestamp_updated_on_totp_remove() {
-        let pw = Password::new(&CryptoPolicy::minimum(), "test_password").expect("Failed to create password");
+        let pw = Password::new(&CryptoPolicy::minimum(), "test_password")
+            .expect("Failed to create password");
         let cred = Credential::new_from_password(pw, OffsetDateTime::UNIX_EPOCH);
 
         let totp = Totp::generate_secure(TOTP_DEFAULT_STEP);
-        let cred_with_totp = cred.append_totp("test_totp".to_string(), totp, OffsetDateTime::UNIX_EPOCH + Duration::from_millis(10));
+        let cred_with_totp = cred.append_totp(
+            "test_totp".to_string(),
+            totp,
+            OffsetDateTime::UNIX_EPOCH + Duration::from_millis(10),
+        );
         let timestamp_after_append = cred_with_totp.timestamp;
 
-
-
-        let cred_removed = cred_with_totp.remove_totp("test_totp", OffsetDateTime::UNIX_EPOCH + Duration::from_millis(20));
+        let cred_removed = cred_with_totp.remove_totp(
+            "test_totp",
+            OffsetDateTime::UNIX_EPOCH + Duration::from_millis(20),
+        );
 
         // Verify timestamp was updated
         assert!(cred_removed.timestamp > timestamp_after_append);
@@ -931,12 +948,20 @@ mod tests {
 
     #[test]
     fn test_credential_timestamp_updated_on_password_change() {
-        let original_cred = Credential::new_password_only(&CryptoPolicy::minimum(), "original_password", OffsetDateTime::UNIX_EPOCH)
-            .expect("Failed to create credential");
+        let original_cred = Credential::new_password_only(
+            &CryptoPolicy::minimum(),
+            "original_password",
+            OffsetDateTime::UNIX_EPOCH,
+        )
+        .expect("Failed to create credential");
         let original_timestamp = original_cred.timestamp;
 
         let updated_cred = original_cred
-            .set_password(&CryptoPolicy::minimum(), "new_password", OffsetDateTime::UNIX_EPOCH + Duration::from_millis(10))
+            .set_password(
+                &CryptoPolicy::minimum(),
+                "new_password",
+                OffsetDateTime::UNIX_EPOCH + Duration::from_millis(10),
+            )
             .expect("Failed to update password");
 
         // Verify timestamp was updated
@@ -946,11 +971,14 @@ mod tests {
 
     #[test]
     fn test_credential_timestamp_preserved_on_password_upgrade() {
-        let original_cred = Credential::new_password_only(&CryptoPolicy::minimum(), "test_password", OffsetDateTime::UNIX_EPOCH)
-            .expect("Failed to create credential");
+        let original_cred = Credential::new_password_only(
+            &CryptoPolicy::minimum(),
+            "test_password",
+            OffsetDateTime::UNIX_EPOCH,
+        )
+        .expect("Failed to create credential");
         let original_timestamp = original_cred.timestamp;
         let original_uuid = original_cred.uuid;
-
 
         // Password upgrade should preserve UUID and timestamp since it's just
         // updating the hash algorithm, not actually changing the password
@@ -971,19 +999,27 @@ mod tests {
         use crate::credential::BackupCodes;
         use hashbrown::HashSet;
 
-        let pw = Password::new(&CryptoPolicy::minimum(), "test_password").expect("Failed to create password");
+        let pw = Password::new(&CryptoPolicy::minimum(), "test_password")
+            .expect("Failed to create password");
         let cred = Credential::new_from_password(pw, OffsetDateTime::UNIX_EPOCH);
 
         // Add TOTP to make it MFA
         let totp = Totp::generate_secure(TOTP_DEFAULT_STEP);
-        let mfa_cred = cred.append_totp("test_totp".to_string(), totp, OffsetDateTime::UNIX_EPOCH + Duration::from_millis(10));
+        let mfa_cred = cred.append_totp(
+            "test_totp".to_string(),
+            totp,
+            OffsetDateTime::UNIX_EPOCH + Duration::from_millis(10),
+        );
         let mfa_timestamp = mfa_cred.timestamp;
 
         // Add backup codes
         let backup_codes =
             BackupCodes::new(HashSet::from(["code1".to_string(), "code2".to_string()]));
         let cred_with_backup = mfa_cred
-            .update_backup_code(backup_codes, OffsetDateTime::UNIX_EPOCH + Duration::from_millis(20))
+            .update_backup_code(
+                backup_codes,
+                OffsetDateTime::UNIX_EPOCH + Duration::from_millis(20),
+            )
             .expect("Failed to add backup codes");
 
         // Verify timestamp was updated
