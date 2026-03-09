@@ -2808,6 +2808,7 @@ mod tests {
     use kanidm_proto::v1::{AuthAllowed, AuthIssueSession, AuthMech, UnixUserToken};
     use sshkey_attest::proto::PublicKey as SshPublicKey;
     use std::time::Duration;
+    use time::OffsetDateTime;
     use uuid::uuid;
     use webauthn_authenticator_rs::softpasskey::SoftPasskey;
     use webauthn_authenticator_rs::softtoken::{self, SoftToken};
@@ -2817,6 +2818,8 @@ mod tests {
     const TEST_CURRENT_TIME: u64 = 6000;
     const TESTPERSON_UUID: Uuid = uuid!("cf231fea-1a8f-4410-a520-fd9b1a379c86");
     const TESTPERSON_NAME: &str = "testperson";
+
+    const TESTPERSON_PASSWORD: &str = "SSBndWVzcyB5b3UgZGlzY292ZXJlZCB0aGUgc2VjcmV0";
 
     const SSHKEY_VALID_1: &str = "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBENubZikrb8hu+HeVRdZ0pp/VAk2qv4JDbuJhvD0yNdWDL2e3cBbERiDeNPkWx58Q4rVnxkbV1fa8E2waRtT91wAAAAEc3NoOg== testuser@fidokey";
     const SSHKEY_VALID_2: &str = "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBIbkSsdGCRoW6v0nO/3vNYPhG20YhWU0wQPY7x52EOb4dmYhC4IJfzVDpEPg313BxWRKQglb5RQ1PPkou7JFyCUAAAAEc3NoOg== testuser@fidokey";
@@ -2972,6 +2975,21 @@ mod tests {
         idms: &IdmServer,
         ct: Duration,
     ) -> (CredentialUpdateSessionToken, CredentialUpdateSessionStatus) {
+        setup_test_session_inner(idms, ct, true).await
+    }
+
+    async fn setup_test_session_no_posix(
+        idms: &IdmServer,
+        ct: Duration,
+    ) -> (CredentialUpdateSessionToken, CredentialUpdateSessionStatus) {
+        setup_test_session_inner(idms, ct, false).await
+    }
+
+    async fn setup_test_session_inner(
+        idms: &IdmServer,
+        ct: Duration,
+        posix: bool,
+    ) -> (CredentialUpdateSessionToken, CredentialUpdateSessionStatus) {
         let mut idms_prox_write = idms.proxy_write(ct).await.unwrap();
 
         // Remove the default all persons policy, it interferes with our test.
@@ -2981,10 +2999,9 @@ mod tests {
             .internal_modify_uuid(UUID_IDM_ALL_PERSONS, &modlist)
             .expect("Unable to change default session exp");
 
-        let e2 = entry_init!(
+        let mut builder = entry_init!(
             (Attribute::Class, EntryClass::Object.to_value()),
             (Attribute::Class, EntryClass::Account.to_value()),
-            (Attribute::Class, EntryClass::PosixAccount.to_value()),
             (Attribute::Class, EntryClass::Person.to_value()),
             (Attribute::Name, Value::new_iname(TESTPERSON_NAME)),
             (Attribute::Uuid, Value::Uuid(TESTPERSON_UUID)),
@@ -2992,7 +3009,11 @@ mod tests {
             (Attribute::DisplayName, Value::new_utf8s(TESTPERSON_NAME))
         );
 
-        let ce = CreateEvent::new_internal(vec![e2]);
+        if posix {
+            builder.add_ava(Attribute::Class, EntryClass::PosixAccount.to_value());
+        }
+
+        let ce = CreateEvent::new_internal(vec![builder]);
         let cr = idms_prox_write.qs_write.create(&ce);
         assert!(cr.is_ok());
 
@@ -3001,12 +3022,14 @@ mod tests {
             .internal_search_uuid(TESTPERSON_UUID)
             .expect("failed");
 
-        // Setup the radius creds to ensure we don't use them anywhere else.
-        let rrse = RegenerateRadiusSecretEvent::new_internal(TESTPERSON_UUID);
+        if posix {
+            // Setup the radius creds to ensure we don't use them anywhere else.
+            let rrse = RegenerateRadiusSecretEvent::new_internal(TESTPERSON_UUID);
 
-        let _ = idms_prox_write
-            .regenerate_radius_secret(&rrse)
-            .expect("Failed to reset radius credential 1");
+            let _ = idms_prox_write
+                .regenerate_radius_secret(&rrse)
+                .expect("Failed to reset radius credential 1");
+        }
 
         let cur = idms_prox_write.init_credential_update(
             &InitCredentialUpdateEvent::new_impersonate_entry(testperson),
@@ -5382,5 +5405,327 @@ mod tests {
             .warnings
             .contains(&CredentialUpdateSessionStatusWarnings::NoValidCredentials));
         assert!(!c_status.can_commit);
+    }
+
+    async fn get_testperson_password_changed_time(
+        idms: &IdmServer,
+    ) -> Option<OffsetDateTime> {
+        let mut txn = idms.proxy_read().await.unwrap();
+        let entry = txn
+            .qs_read
+            .internal_search_uuid(TESTPERSON_UUID)
+            .expect("Failed to read testperson entry");
+        entry.get_ava_single_datetime(Attribute::PasswordChangedTime)
+    }
+
+    #[idm_test]
+    async fn credential_update_password_changed_time_password_set(
+        idms: &IdmServer,
+        _idms_delayed: &mut IdmServerDelayed,
+    ) {
+        let ct = Duration::from_secs(TEST_CURRENT_TIME);
+
+        let (cust, _) = setup_test_session(idms, ct).await;
+
+        // Sanity check
+        assert!(get_testperson_password_changed_time(idms).await.is_none());
+
+        // Primary Cred with No fallback => EPOCH
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let c_status = cutxn
+            .credential_primary_set_password(&cust, ct, TESTPERSON_PASSWORD)
+            .expect("Failed to update the primary cred password");
+        assert!(c_status.can_commit);
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+
+        let pwd_changed = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be set after setting primary password");
+        assert_eq!(pwd_changed, OffsetDateTime::UNIX_EPOCH);
+
+        // UNIX Cred => Unix Cred Timestamp
+        let (cust, _) = renew_test_session(idms, ct).await;
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let c_status = cutxn
+            .credential_unix_set_password(&cust, ct, TESTPERSON_PASSWORD)
+            .expect("Failed to set unix password");
+        assert!(c_status.can_commit);
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+
+        let pwd_changed = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be set after setting both passwords");
+        // Unix credential is checked first, its timestamp is used.
+        assert_eq!(pwd_changed, OffsetDateTime::UNIX_EPOCH + ct);
+
+        let ct = Duration::from_secs(TEST_CURRENT_TIME + 1000);
+
+        // Update UNIX Cred => New Unix Cred Timestamp
+        let (cust, _) = renew_test_session(idms, ct).await;
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let _ = cutxn
+            .credential_unix_set_password(&cust, ct, "R290Y2hhIGFnYWlu")
+            .expect("Failed to set unix password on second update");
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+
+        let pwd_changed_2 = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be updated on second update");
+        assert_eq!(pwd_changed_2, OffsetDateTime::UNIX_EPOCH + ct);
+        assert!(pwd_changed_2 > pwd_changed);
+    }
+
+    #[idm_test]
+    async fn credential_update_password_changed_time_unix_deleted(
+        idms: &IdmServer,
+        _idms_delayed: &mut IdmServerDelayed,
+    ) {
+        let ct = Duration::from_secs(TEST_CURRENT_TIME);
+
+        // Set up both credentials.
+        let (cust, _) = setup_test_session(idms, ct).await;
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let _ = cutxn
+            .credential_primary_set_password(&cust, ct, TESTPERSON_PASSWORD)
+            .expect("Failed to set primary password");
+        let _ = cutxn
+            .credential_unix_set_password(&cust, ct, TESTPERSON_PASSWORD)
+            .expect("Failed to set unix password");
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+
+        let pwd_changed_1 = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be set");
+        assert_eq!(pwd_changed_1, OffsetDateTime::UNIX_EPOCH + ct);
+
+        let ct = Duration::from_secs(TEST_CURRENT_TIME + 1000);
+
+        // Now delete unix password
+        let (cust, _) = renew_test_session(idms, ct).await;
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let c_status = cutxn
+            .credential_unix_delete(&cust, ct)
+            .expect("Failed to delete unix credential");
+        assert!(c_status.unixcred.is_none());
+        assert!(c_status.can_commit);
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+
+        // Unix cred is gone and timestamp is EPOCH
+        let pwd_changed_2 = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should still be set after deleting unix password");
+        assert_eq!(pwd_changed_2, OffsetDateTime::UNIX_EPOCH);
+    }
+
+    #[idm_test]
+    async fn credential_update_password_changed_time_non_posix(
+        idms: &IdmServer,
+        _idms_delayed: &mut IdmServerDelayed,
+    ) {
+        let ct = Duration::from_secs(TEST_CURRENT_TIME);
+
+        let (cust, _) = setup_test_session_no_posix(idms, ct).await;
+
+        // Sanity check
+        assert!(get_testperson_password_changed_time(idms).await.is_none());
+
+        // No POSIX still causes default to EPOCH
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let c_status = cutxn
+            .credential_primary_set_password(&cust, ct, TESTPERSON_PASSWORD)
+            .expect("Failed to set primary password");
+        assert!(c_status.can_commit);
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+
+        let pwd_changed = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be set for non-posix person");
+        assert_eq!(pwd_changed, OffsetDateTime::UNIX_EPOCH);
+
+        // Enable allow_primary_cred_fallback on all accounts.
+        let mut idms_prox_write = idms.proxy_write(ct).await.unwrap();
+        idms_prox_write
+            .qs_write
+            .internal_modify_uuid(
+                UUID_IDM_ALL_ACCOUNTS,
+                &ModifyList::new_purge_and_set(
+                    Attribute::AllowPrimaryCredFallback,
+                    Value::new_bool(true),
+                ),
+            )
+            .expect("Unable to set allow_primary_cred_fallback");
+        idms_prox_write.commit().expect("Failed to commit txn");
+
+        // With fallback enabled PrimaryCred timestamp is used despite not being POSIX account
+        let (cust, _) = renew_test_session(idms, ct).await;
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let _ = cutxn
+            .credential_primary_set_password(&cust, ct, TESTPERSON_PASSWORD)
+            .expect("Failed to set primary password");
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+        let pwd_changed = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be set with fallback enabled");
+        assert_eq!(pwd_changed, OffsetDateTime::UNIX_EPOCH + ct);
+    }
+
+    #[idm_test]
+    async fn credential_update_password_changed_time_passkey_only(
+        idms: &IdmServer,
+        _idms_delayed: &mut IdmServerDelayed,
+    ) {
+        let ct = Duration::from_secs(TEST_CURRENT_TIME);
+        let (cust, _) = setup_test_session_no_posix(idms, ct).await;
+
+        // Sanity check
+        assert!(get_testperson_password_changed_time(idms).await.is_none());
+
+
+        // Setting Passkey with no Password Credentials causes EPOCH to be set
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let origin = cutxn.get_origin().clone();
+        let mut wa = WebauthnAuthenticator::new(SoftPasskey::new(true));
+
+        let c_status = create_new_passkey(ct, &origin, &cutxn, &cust, &mut wa).await;
+        assert!(c_status.can_commit);
+        assert_eq!(c_status.passkeys.len(), 1);
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+
+        // No password credential was set, so the sentinel UNIX_EPOCH is used.
+        let pwd_changed = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be set even for passkey-only");
+        assert_eq!(pwd_changed, time::OffsetDateTime::UNIX_EPOCH);
+    }
+
+    #[idm_test]
+    async fn credential_update_password_changed_time_no_change_commit(
+        idms: &IdmServer,
+        _idms_delayed: &mut IdmServerDelayed,
+    ) {
+        let ct = Duration::from_secs(TEST_CURRENT_TIME);
+        let (cust, _) = setup_test_session(idms, ct).await;
+
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let _ = cutxn
+            .credential_primary_set_password(&cust, ct, TESTPERSON_PASSWORD)
+            .expect("Failed to set primary password");
+        let _ = cutxn
+            .credential_unix_set_password(&cust, ct, TESTPERSON_PASSWORD)
+            .expect("Failed to set unix password");
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+
+        let pwd_changed_1 = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be set after first update");
+
+
+        let ct2 = Duration::from_secs(TEST_CURRENT_TIME + 2000);
+
+        // Renew session and commit without making any changes.
+        let (cust, c_status) = renew_test_session(idms, ct2).await;
+        assert!(c_status.primary.is_some());
+        assert!(c_status.can_commit);
+        commit_session(idms, ct2, cust).await;
+
+        let pwd_changed_2 = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should still be present after no-change commit");
+
+        assert_eq!(pwd_changed_2, OffsetDateTime::UNIX_EPOCH + ct);
+        assert_eq!(pwd_changed_2, pwd_changed_1);
+    }
+
+    #[idm_test]
+    async fn credential_update_unix_password_deleted_falls_back(
+        idms: &IdmServer,
+        _idms_delayed: &mut IdmServerDelayed,
+    ) {
+        let ct = Duration::from_secs(TEST_CURRENT_TIME);
+        let ct2 = Duration::from_secs(TEST_CURRENT_TIME + 50);
+
+        let (cust, _) = setup_test_session(idms, ct).await;
+
+        // Enable allow_primary_cred_fallback on all accounts.
+        let mut idms_prox_write = idms.proxy_write(ct).await.unwrap();
+        idms_prox_write
+            .qs_write
+            .internal_modify_uuid(
+                UUID_IDM_ALL_ACCOUNTS,
+                &ModifyList::new_purge_and_set(
+                    Attribute::AllowPrimaryCredFallback,
+                    Value::new_bool(true),
+                ),
+            )
+            .expect("Unable to set allow_primary_cred_fallback");
+        idms_prox_write.commit().expect("Failed to commit txn");
+
+        // Sanity check
+        assert!(get_testperson_password_changed_time(idms).await.is_none());
+
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+        let _ = cutxn
+            .credential_primary_set_password(&cust, ct, TESTPERSON_PASSWORD)
+            .expect("Failed to set primary password");
+
+        let _ = cutxn
+            .credential_unix_set_password(&cust, ct2, TESTPERSON_PASSWORD)
+            .expect("Failed to set unix password");
+
+        let c_status = cutxn
+            .credential_primary_init_totp(&cust, ct)
+            .expect("Failed to init totp");
+
+        let totp_token: Totp = match c_status.mfaregstate {
+            MfaRegStateStatus::TotpCheck(secret) => Some(secret.try_into().unwrap()),
+            _ => None,
+        }
+        .expect("Unable to retrieve totp token");
+
+        let chal = totp_token
+            .do_totp_duration_from_epoch(&ct)
+            .expect("Failed to perform totp step");
+
+        let c_status = cutxn
+            .credential_primary_check_totp(&cust, ct, chal, "totp")
+            .expect("Failed to check totp");
+
+        assert!(matches!(c_status.mfaregstate, MfaRegStateStatus::None));
+        assert!(c_status.can_commit);
+
+        drop(cutxn);
+        commit_session(idms, ct, cust).await;
+
+        let pwd_changed = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be set for password+TOTP");
+        // No unix cred is set and fallback is disabled, so sentinel UNIX_EPOCH is used.
+        assert_eq!(pwd_changed, OffsetDateTime::UNIX_EPOCH + ct2);
+
+        // Delete Unix, PasswordChangedTime should fall back to Primary
+        let (cust, _) = renew_test_session(idms, ct2).await;
+        let cutxn = idms.cred_update_transaction().await.unwrap();
+
+        let _ = cutxn
+            .credential_unix_delete(&cust, ct2)
+            .expect("Failed to delete unix credential");
+
+        assert!(c_status.can_commit);
+        drop(cutxn);
+        commit_session(idms, ct2, cust).await;
+
+        let pwd_changed_2 = get_testperson_password_changed_time(idms)
+            .await
+            .expect("PasswordChangedTime should be set after switching to passkey");
+        assert_eq!(pwd_changed_2, OffsetDateTime::UNIX_EPOCH + ct);
     }
 }
