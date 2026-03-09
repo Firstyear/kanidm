@@ -129,6 +129,8 @@ pub fn phase_1_schema_attrs() -> Vec<EntryInitNew> {
         SCHEMA_ATTR_OAUTH2_CONSENT_PROMPT_ENABLE.clone().into(),
         SCHEMA_ATTR_S256.clone().into(),
         SCHEMA_ATTR_ACCOUNT_SOFTLOCK_EXPIRE.clone().into(),
+        // DL14
+        SCHEMA_ATTR_PASSWORD_CHANGED_TIME.clone().into(),
     ]
 }
 
@@ -158,7 +160,7 @@ pub fn phase_2_schema_classes() -> Vec<EntryInitNew> {
         SCHEMA_CLASS_CLIENT_CERTIFICATE_DL7.clone().into(),
         // DL8
         SCHEMA_CLASS_ACCOUNT_POLICY_DL8.clone().into(),
-        SCHEMA_CLASS_PERSON_DL8.clone().into(),
+        SCHEMA_CLASS_PERSON_DL14.clone().into(),
         // DL9
         SCHEMA_CLASS_OAUTH2_RS_DL9.clone().into(),
         // DL10

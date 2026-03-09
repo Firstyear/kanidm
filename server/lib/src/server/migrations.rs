@@ -868,6 +868,17 @@ impl QueryServerWriteTransaction<'_> {
 
         self.reload()?;
 
+        // Default PasswordChangedTime to UNIX_EPOCH
+        let filter = filter_all!(f_and!([
+            f_eq(Attribute::Class, EntryClass::Person.into()),
+            f_andnot(f_pres(Attribute::PasswordChangedTime)),
+        ]));
+        let modlist = ModifyList::new_purge_and_set(
+            Attribute::PasswordChangedTime,
+            Value::DateTime(time::OffsetDateTime::UNIX_EPOCH),
+        );
+        self.internal_modify(&filter, &modlist)?;
+
         Ok(())
     }
 
@@ -1387,6 +1398,32 @@ mod tests {
 
         assert_eq!(db_domain_version, DOMAIN_LEVEL_13);
 
+        // Create a person without pwd_changed_time
+        let tuuid = Uuid::new_v4();
+        let e1 = entry_init!(
+            (Attribute::Class, EntryClass::Object.to_value()),
+            (Attribute::Class, EntryClass::Person.to_value()),
+            (Attribute::Class, EntryClass::Account.to_value()),
+            (Attribute::Name, Value::new_iname("testperson1")),
+            (Attribute::Uuid, Value::Uuid(tuuid)),
+            (Attribute::Description, Value::new_utf8s("testperson1")),
+            (Attribute::DisplayName, Value::new_utf8s("testperson1"))
+        );
+
+        write_txn
+            .internal_create(vec![e1])
+            .expect("Unable to create test person");
+
+        let user = write_txn
+            .internal_search_uuid(tuuid)
+            .expect("Unable to load test person");
+
+        // sanity check
+        assert!(
+            user.get_ava_single_datetime(Attribute::PasswordChangedTime)
+                .is_none()
+        );
+
         write_txn.commit().expect("Unable to commit");
 
         // == pre migration verification. ==
@@ -1405,6 +1442,16 @@ mod tests {
             .expect("Unable to set domain level to version 14");
 
         // post migration verification.
+        // pwd_changed_time should be defaulted to UNIX_EPOCH
+        let user = write_txn
+            .internal_search_uuid(tuuid)
+            .expect("Unable to load test person after migration");
+
+        let pwd_changed = user
+            .get_ava_single_datetime(Attribute::PasswordChangedTime)
+            .expect("PasswordChangedTime should be set after DL13->DL14 migration");
+
+        assert_eq!(pwd_changed, time::OffsetDateTime::UNIX_EPOCH);
 
         write_txn.commit().expect("Unable to commit");
     }

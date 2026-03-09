@@ -257,6 +257,14 @@ pub static SCHEMA_ATTR_UNIX_PASSWORD: LazyLock<SchemaAttribute> =
         ..Default::default()
     });
 
+pub static SCHEMA_ATTR_PASSWORD_CHANGED_TIME: LazyLock<SchemaAttribute> = LazyLock::new(|| SchemaAttribute {
+    uuid: UUID_SCHEMA_ATTR_PASSWORD_CHANGED_TIME,
+    name: Attribute::PasswordChangedTime,
+    description: "The time when the password was last changed.".to_string(),
+    syntax: SyntaxType::DateTime,
+    ..Default::default()
+});
+
 pub static SCHEMA_ATTR_NSUNIQUEID: LazyLock<SchemaAttribute> = LazyLock::new(|| SchemaAttribute {
     uuid: UUID_SCHEMA_ATTR_NSUNIQUEID,
     name: Attribute::NsUniqueId,
@@ -1032,7 +1040,7 @@ pub static SCHEMA_ATTR_S256: LazyLock<SchemaAttribute> = LazyLock::new(|| Schema
 });
 
 // === classes ===
-pub static SCHEMA_CLASS_PERSON_DL8: LazyLock<SchemaClass> = LazyLock::new(|| SchemaClass {
+pub static SCHEMA_CLASS_PERSON_DL14: LazyLock<SchemaClass> = LazyLock::new(|| SchemaClass {
     uuid: UUID_SCHEMA_CLASS_PERSON,
     name: EntryClass::Person.into(),
     description: "Object representation of a person".to_string(),
@@ -1051,6 +1059,7 @@ pub static SCHEMA_CLASS_PERSON_DL8: LazyLock<SchemaClass> = LazyLock::new(|| Sch
         Attribute::Mail,
         Attribute::LegalName,
         Attribute::ApplicationPassword,
+        Attribute::PasswordChangedTime,
     ],
     systemmust: vec![Attribute::Name],
     systemexcludes: vec![
