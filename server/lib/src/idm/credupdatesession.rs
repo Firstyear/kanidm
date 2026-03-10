@@ -1536,7 +1536,8 @@ impl IdmServerProxyWriteTransaction<'_> {
             ));
         };
 
-        let mut cred_changed: Option<OffsetDateTime> = None;
+        let mut unix_cred_changed = false;
+        let mut unix_cred_present = false;
 
         match session.unixcred_state {
             CredentialState::DeleteOnly | CredentialState::Modifiable => {
@@ -1545,25 +1546,27 @@ impl IdmServerProxyWriteTransaction<'_> {
                 if let Some(ncred) = &session.unixcred {
                     let vcred = Value::new_credential("unix", ncred.clone());
                     modlist.push_mod(Modify::Present(Attribute::UnixPassword, vcred));
-                    cred_changed = Some(ncred.timestamp());
+                    unix_cred_present = true;
+                    unix_cred_changed = true;
                 }
             }
             CredentialState::PolicyDeny => {
                 modlist.push_mod(Modify::Purged(Attribute::UnixPassword));
+                // Since we deleted the credential, it may fall back to primary, so this
+                // represents a change in the unix credential, even if primary isn't changed.
+                unix_cred_changed = true;
             }
             CredentialState::AccessDeny => {}
         };
 
-        // If we cannot fall back
-        if cred_changed.is_none()
+        // If the unix credential is not present, and we have the fallback policy enabled,
+        // we need to be read to update the pwd-changed-time from the primary credential
+        // instead.
+        let unix_cred_is_falling_back = !unix_cred_present
             && session
                 .resolved_account_policy
                 .allow_primary_cred_fallback()
-                != Some(true)
-        {
-            // then we don't need to update the password changed time
-            cred_changed = Some(OffsetDateTime::UNIX_EPOCH);
-        }
+                .unwrap_or_default();
 
         match session.primary_state {
             CredentialState::Modifiable => {
@@ -1572,18 +1575,25 @@ impl IdmServerProxyWriteTransaction<'_> {
                     let vcred = Value::new_credential("primary", ncred.clone());
                     modlist.push_mod(Modify::Present(Attribute::PrimaryCredential, vcred));
 
-                    cred_changed.get_or_insert(ncred.timestamp());
+                    if unix_cred_is_falling_back {
+                        unix_cred_changed = true;
+                    }
                 };
             }
             CredentialState::DeleteOnly | CredentialState::PolicyDeny => {
                 modlist.push_mod(Modify::Purged(Attribute::PrimaryCredential));
+
+                if unix_cred_is_falling_back {
+                    unix_cred_changed = true;
+                }
             }
             CredentialState::AccessDeny => {}
         };
 
-        cred_changed.get_or_insert(OffsetDateTime::UNIX_EPOCH);
+        if unix_cred_changed {
+            // The change occurs *now*
+            let timestamp = OffsetDateTime::UNIX_EPOCH + ct;
 
-        if let Some(timestamp) = cred_changed {
             modlist.push_mod(Modify::Purged(Attribute::PasswordChangedTime));
             modlist.push_mod(Modify::Present(
                 Attribute::PasswordChangedTime,
