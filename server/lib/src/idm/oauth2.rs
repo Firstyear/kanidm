@@ -13,7 +13,7 @@ use crate::server::keys::{
     KeyId, KeyObject, KeyProvidersTransaction, KeyProvidersWriteTransaction,
 };
 use crate::utils;
-use crate::value::{Oauth2Session, OauthClaimMapJoin, SessionState, OAUTHSCOPE_RE};
+use crate::value::{Oauth2Session, OauthClaimMapJoin, SessionState, EXTRACT_VAL_DN, OAUTHSCOPE_RE};
 use base64::{engine::general_purpose, Engine as _};
 pub use compact_jwt::{compact::JwkKeySet, OidcToken};
 use compact_jwt::{
@@ -2221,6 +2221,27 @@ impl IdmServerProxyWriteTransaction<'_> {
 }
 
 impl IdmServerProxyReadTransaction<'_> {
+    fn login_hint_matches_current_identity(&self, ident: &Identity, login_hint: &str) -> bool {
+        let Some(work) = EXTRACT_VAL_DN
+            .captures(login_hint)
+            .and_then(|caps| caps.name("val"))
+            .map(|v| v.as_str().to_lowercase())
+        else {
+            return false;
+        };
+
+        let Some(entry) = ident.get_user_entry() else {
+            return false;
+        };
+
+        entry
+            .get_ava_single_iname(Attribute::Name)
+            .is_some_and(|name| name == work)
+            || entry
+                .get_ava_single_proto_string(Attribute::Spn)
+                .is_some_and(|spn| spn == work)
+    }
+
     #[instrument(level = "debug", skip_all)]
     pub fn check_oauth2_authorisation(
         &self,
@@ -2452,6 +2473,23 @@ impl IdmServerProxyReadTransaction<'_> {
                 });
             }
         };
+
+        if auth_req.prompt.contains(&Prompt::Login) && auth_req_ctx.resumed == false {
+            if let Some(login_hint) = auth_req.oidc_ext.login_hint.as_deref() {
+                if self.login_hint_matches_current_identity(ident, login_hint) {
+                    debug!(
+                        ?login_hint,
+                        "login_hint resolves to the current identity, allowing re-authentication"
+                    );
+                } else {
+                    debug!(?login_hint, "login_hint does not resolve to the current identity, forcing a fresh authentication flow");
+                    return Ok(AuthoriseResponse::AuthenticationRequired {
+                        client_name: o2rs.displayname.clone(),
+                        login_hint: auth_req.oidc_ext.login_hint.clone(),
+                    });
+                }
+            }
+        }
 
         // OIDC Core 1.0 §3.1.2.1
         // prompt=login - The Authorization Server MUST prompt the End-User to re-authenticate.
@@ -8720,6 +8758,98 @@ mod tests {
         assert!(
             matches!(result, AuthoriseResponse::ConsentRequested { .. }),
             "prompt=login should not have been forced"
+        );
+    }
+
+    #[idm_test]
+    async fn test_idm_oauth2_prompt_login_same_user_login_hint_allows_reauthentication(
+        idms: &IdmServer,
+        _idms_delayed: &mut IdmServerDelayed,
+    ) {
+        let ct = Duration::from_secs(TEST_CURRENT_TIME);
+        let (_secret, _uat, ident, _) =
+            setup_oauth2_resource_server_basic(idms, ct, true, false, false).await;
+
+        let idms_prox_read = idms.proxy_read().await.unwrap();
+        let pkce_secret = PkceS256Secret::default();
+        let auth_req_ctx = AuthorisationRequestContext { resumed: false };
+
+        let mut auth_req =
+            auth_req_with_prompt(pkce_secret.to_request(), Vec::from([Prompt::Login]));
+        auth_req.oidc_ext.login_hint = Some("testperson1".to_string());
+
+        let result = idms_prox_read
+            .check_oauth2_authorisation(Some(&ident), &auth_req, &auth_req_ctx, ct)
+            .expect("prompt=login should not error");
+
+        assert!(
+            matches!(result, AuthoriseResponse::ReauthenticationRequired { .. }),
+            "prompt=login with a matching short login_hint should re-authenticate the current user"
+        );
+
+        let mut auth_req =
+            auth_req_with_prompt(pkce_secret.to_request(), Vec::from([Prompt::Login]));
+        auth_req.oidc_ext.login_hint = Some("testperson1@example.com".to_string());
+
+        let result = idms_prox_read
+            .check_oauth2_authorisation(Some(&ident), &auth_req, &auth_req_ctx, ct)
+            .expect("prompt=login should not error");
+
+        assert!(
+            matches!(result, AuthoriseResponse::ReauthenticationRequired { .. }),
+            "prompt=login with a matching full login_hint should re-authenticate the current user"
+        );
+    }
+
+    #[idm_test]
+    async fn test_idm_oauth2_prompt_login_different_user_login_hint_forces_fresh_login(
+        idms: &IdmServer,
+        _idms_delayed: &mut IdmServerDelayed,
+    ) {
+        let ct = Duration::from_secs(TEST_CURRENT_TIME);
+        let (_secret, _uat, ident, _) =
+            setup_oauth2_resource_server_basic(idms, ct, true, false, false).await;
+
+        let idms_prox_read = idms.proxy_read().await.unwrap();
+        let pkce_secret = PkceS256Secret::default();
+        let auth_req_ctx = AuthorisationRequestContext { resumed: false };
+
+        let mut auth_req =
+            auth_req_with_prompt(pkce_secret.to_request(), Vec::from([Prompt::Login]));
+        auth_req.oidc_ext.login_hint = Some("testperson2".to_string());
+
+        let result = idms_prox_read
+            .check_oauth2_authorisation(Some(&ident), &auth_req, &auth_req_ctx, ct)
+            .expect("prompt=login should not error");
+
+        assert!(
+            matches!(
+                result,
+                AuthoriseResponse::AuthenticationRequired {
+                    login_hint: Some(ref login_hint),
+                    ..
+                } if login_hint == "testperson2"
+            ),
+            "prompt=login with a different short login_hint should force a fresh login"
+        );
+
+        let mut auth_req =
+            auth_req_with_prompt(pkce_secret.to_request(), Vec::from([Prompt::Login]));
+        auth_req.oidc_ext.login_hint = Some("testperson2@example.com".to_string());
+
+        let result = idms_prox_read
+            .check_oauth2_authorisation(Some(&ident), &auth_req, &auth_req_ctx, ct)
+            .expect("prompt=login should not error");
+
+        assert!(
+            matches!(
+                result,
+                AuthoriseResponse::AuthenticationRequired {
+                    login_hint: Some(ref login_hint),
+                    ..
+                } if login_hint == "testperson2@example.com"
+            ),
+            "prompt=login with a different full login_hint should force a fresh login"
         );
     }
 
