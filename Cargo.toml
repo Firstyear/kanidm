@@ -257,7 +257,7 @@ reqwest = { version = "0.13.4", default-features = false, features = [
     "rustls",
     "query",
 ] }
-rusqlite = { version = "0.40.1", features = ["array", "bundled"] }
+rusqlite = { version = "0.39.0", features = ["array", "bundled"] }
 rustls = { version = "0.23.37", default-features = false, features = [
     "std",
     "aws_lc_rs",

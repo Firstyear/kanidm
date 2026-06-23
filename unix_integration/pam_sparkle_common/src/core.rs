@@ -105,6 +105,7 @@ pub trait PamHandler {
 
     fn envlist(&self) -> PamResult<Vec<String>>;
 
+    #[allow(dead_code)]
     fn set_env(&self, value: &str) -> PamResult<()>;
 
     fn authtok(&self) -> PamResult<Option<String>>;

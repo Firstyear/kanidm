@@ -66,6 +66,7 @@ extern "C" {
 
     fn pam_getenvlist(pamh: *const PamHandle) -> *mut *mut c_char;
 
+    #[allow(dead_code)]
     fn pam_putenv(pamh: *const PamHandle, value: *const c_char) -> PamResultCode;
 }
 
@@ -301,6 +302,7 @@ impl PamHandle {
         Ok(work_array)
     }
 
+    #[allow(dead_code)]
     fn putenv(&self, value: &str) -> PamResult<()> {
         let c_value = CString::new(value).map_err(|_| PamResultCode::PAM_CONV_ERR)?;
 
