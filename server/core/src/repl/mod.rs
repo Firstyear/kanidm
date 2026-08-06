@@ -518,7 +518,7 @@ async fn repl_task(
     };
 
     let Ok(server_name) = ServerName::try_from(domain.to_owned()) else {
-        error!("Replica origin does not have a valid domain name, unable to proceed.");
+        error!("Replica origin does not have a valid domain name, unable to proceed. Perhaps you tried to use an ip address?");
         return;
     };
 
@@ -759,7 +759,7 @@ async fn repl_acceptor(
     let domain_name = match repl_config.origin.domain() {
         Some(n) => n.to_string(),
         None => {
-            error!("Unable to start replication, replication origin does not contain a valid domain name.");
+            error!("Unable to start replication, replication origin does not contain a valid domain name. Perhaps you tried to use an ip address?");
             return;
         }
     };
