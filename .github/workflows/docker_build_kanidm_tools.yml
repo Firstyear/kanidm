@@ -2,8 +2,10 @@
 name: Container - Kanidm Tools
 
 "on":
-  pull_request:
   push:
+    branches:
+      - master
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

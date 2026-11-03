@@ -4,8 +4,9 @@ name: GitHub Pages
 "on":
   push:
     branches:
-      - "master"
-  pull_request:
+      - master
+      - main
+      - 1.*
 
 # yamllint disable-line rule:line-length
 # permissions list: https://docs.github.com/en/actions/security-guides/automatic-token-authentication#modifying-the-permissions-for-the-github_token

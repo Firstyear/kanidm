@@ -3,9 +3,6 @@ name: Windows Build and Test
 
 # Trigger the workflow on push to master or pull request
 "on":
-  push:
-    branches:
-      - master
   pull_request:
   workflow_dispatch:  # so you can run it manually
 env:

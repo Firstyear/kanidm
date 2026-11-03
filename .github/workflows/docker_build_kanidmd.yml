@@ -4,8 +4,10 @@ name: Container - Kanidmd
 # This is always built and uploads an OCI image as a build artifact, but only
 # pushes to "ghcr.io/kanidm/kanidmd:devel" when on "kanidm/kanidm@master".
 "on":
-  pull_request:
   push:
+    branches:
+      - master
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

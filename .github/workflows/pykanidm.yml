@@ -2,10 +2,10 @@
 name: PyKanidm tests
 
 "on":
-  push:
-    branches:
-      - "master"
   pull_request:
+    paths:
+      - '**.py'
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

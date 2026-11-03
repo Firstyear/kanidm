@@ -2,10 +2,9 @@
 name: "Linux Build and Test"
 # Trigger the workflow on push to master or pull request
 "on":
-  push:
-    branches:
-      - master
   pull_request:
+    paths:
+      - '**.rs'
 
 env:
   SCCACHE_GHA_ENABLED: "true"

@@ -1,8 +1,10 @@
 ---
 name: Javascript Linting
 "on":
-  - push
-  - pull_request
+  pull_request:
+    paths:
+      - '**.js'
+
 jobs:
   javascript_lint:
     runs-on: ubuntu-latest
