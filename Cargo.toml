@@ -48,7 +48,6 @@ members = [
 ]
 
 exclude = [
-    "tools/device_flow",
     "tools/oauth2-tester",
 ]
 

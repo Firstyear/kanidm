@@ -97,7 +97,7 @@ pub const DOMAIN_MAX_LEVEL: DomainVersion = DOMAIN_LEVEL_1_14;
 
 // This is the LOWEST level of database we can recreate. This is important for testing,
 // but we don't actually expect it to be used.
-pub const DOMAIN_MIN_CREATION_LEVEL: DomainVersion = DOMAIN_LEVEL_11;
+pub const DOMAIN_MIN_CREATION_LEVEL: DomainVersion = DOMAIN_LEVEL_12;
 
 // The previous releases domain functional level
 pub const DOMAIN_PREVIOUS_TGT_LEVEL: DomainVersion = DOMAIN_TGT_LEVEL - 1;

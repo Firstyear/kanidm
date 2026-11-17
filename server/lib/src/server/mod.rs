@@ -2779,16 +2779,11 @@ impl<'a> QueryServerWriteTransaction<'a> {
         const { assert!(DOMAIN_MIN_REMIGRATION_LEVEL <= DOMAIN_PREVIOUS_TGT_LEVEL) };
         const { assert!(DOMAIN_MIN_REMIGRATION_LEVEL >= DOMAIN_MIN_CREATION_LEVEL) };
 
-        const { assert!(DOMAIN_MIN_CREATION_LEVEL >= DOMAIN_LEVEL_10) };
+        const { assert!(DOMAIN_MIN_CREATION_LEVEL >= DOMAIN_LEVEL_12) };
 
         //                     /--- This needs to be the minimum creation level.
         //                     |                                          /-- This is the minlevel we can remigrate from
         //                     v                                          v
-        if previous_version <= DOMAIN_LEVEL_10 && domain_info_version >= DOMAIN_LEVEL_11 {
-            // 1.6 -> 1.7
-            self.migrate_domain_10_to_11()?;
-        }
-
         if previous_version <= DOMAIN_LEVEL_11 && domain_info_version >= DOMAIN_LEVEL_12 {
             // 1.7 -> 1.8
             self.migrate_domain_11_to_12()?;
