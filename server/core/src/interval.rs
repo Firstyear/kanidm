@@ -3,7 +3,7 @@
 
 use std::{fs, path::Path, str::FromStr};
 
-use chrono::Utc;
+use chrono::Local;
 use cron::Schedule;
 
 use tokio::{
@@ -102,14 +102,6 @@ impl IntervalActor {
 
         info!("Online backup schedule parsed as: {}", cron_expr);
 
-        if cron_expr.upcoming(Utc).next().is_none() {
-            error!(
-                "Online backup schedule error: '{}' will not match any date.",
-                cron_expr
-            );
-            return Err(());
-        }
-
         // Output path handling
         let op = Path::new(&outpath);
 
@@ -136,10 +128,39 @@ impl IntervalActor {
         let backup_compression = online_backup_config.compression;
 
         let handle = tokio::spawn(async move {
-            for next_time in cron_expr.upcoming(Utc) {
+            let mut cron_expr_iter = cron_expr.upcoming(Local);
+
+            let mut next_time = if let Some(next) = cron_expr_iter.next() {
+                next
+            } else {
+                error!(
+                    "Online backup schedule error: '{}' will not match any future date.",
+                    cron_expr
+                );
+                return;
+            };
+            let mut wait_seconds;
+
+            loop {
                 // We add 1 second to the `wait_time` in order to get "even" timestampes
                 // for example: 1 + 17:05:59Z --> 17:06:00Z
-                let wait_seconds = 1 + (next_time - Utc::now()).num_seconds() as u64;
+                let now = Local::now();
+
+                // The time is too old, advance to the next item in the cron schedule.
+                if next_time < now {
+                    if let Some(next) = cron_expr_iter.next() {
+                        next_time = next;
+                    } else {
+                        error!(
+                            "Online backup schedule error: '{}' will not match any future date.",
+                            cron_expr
+                        );
+                        return;
+                    }
+                }
+
+                wait_seconds = 1 + (next_time - now).num_seconds() as u64;
+
                 info!(
                     "Online backup next run on {}, wait_time = {}s",
                     next_time, wait_seconds
@@ -149,7 +170,7 @@ impl IntervalActor {
                     Ok(action) = rx.recv() => {
                         match action {
                             CoreAction::Shutdown => break,
-                            CoreAction::Reload => {}
+                            CoreAction::Reload => continue,
                         }
                     }
                     _ = sleep(Duration::from_secs(wait_seconds)) => {
