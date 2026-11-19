@@ -35,7 +35,7 @@ impl IdmServerProxyReadTransaction<'_> {
         trace!(?oauth2_related);
 
         // Aggregate results to a Vec of AppLink
-        let apps = oauth2_related
+        let mut apps = oauth2_related
             .iter()
             .filter_map(|entry| {
                 let display_name = entry
@@ -60,6 +60,11 @@ impl IdmServerProxyReadTransaction<'_> {
                 })
             })
             .collect::<Vec<_>>();
+
+        // Sort by display name
+        apps.sort_unstable_by_key(|a| match a {
+            AppLink::Oauth2 { display_name, .. } => display_name.clone(),
+        });
 
         debug!("returned {} related apps", apps.len());
         trace!(?apps);
