@@ -534,37 +534,6 @@ pub trait QueryServerTransactionPublic<'a> {
             .map(|v| v.unwrap_or_else(|| format!("uuid={}", uuid.as_hyphenated())))
     }
 
-    /// From internal, generate an "exists" event and dispatch
-    #[instrument(level = "debug", skip_all)]
-    fn internal_exists(&mut self, filter: &Filter<FilterInvalid>) -> Result<bool, OperationError> {
-        // Check the filter
-        let f_valid = filter
-            .validate(self.get_schema())
-            .map_err(OperationError::SchemaViolation)?;
-        // Build an exists event
-        let ee = ExistsEvent::new_internal(f_valid);
-        // Submit it
-        self.exists(&ee)
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    fn internal_exists_uuid(&mut self, uuid: Uuid) -> Result<bool, OperationError> {
-        let filter = filter!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
-        self.internal_exists(&filter)
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    fn internal_search(
-        &mut self,
-        filter: Filter<FilterInvalid>,
-    ) -> Result<Vec<Arc<EntrySealedCommitted>>, OperationError> {
-        let f_valid = filter
-            .validate(self.get_schema())
-            .map_err(OperationError::SchemaViolation)?;
-        let se = SearchEvent::new_internal(f_valid);
-        self.search(&se)
-    }
-
     #[instrument(level = "debug", skip_all)]
     fn impersonate_search_valid(
         &mut self,
@@ -646,67 +615,6 @@ pub trait QueryServerTransactionPublic<'a> {
         self.impersonate_search_ext_valid(f_valid, f_intent_valid, event)
     }
 
-    /// Get a single entry by its UUID. This is used heavily for internal
-    /// server operations, especially in login and ACP checks.
-    #[instrument(level = "debug", skip_all)]
-    fn internal_search_uuid(
-        &mut self,
-        uuid: Uuid,
-    ) -> Result<Arc<EntrySealedCommitted>, OperationError> {
-        let filter = filter!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
-        let f_valid = filter.validate(self.get_schema()).map_err(|e| {
-            error!(?e, "Filter Validate - SchemaViolation");
-            OperationError::SchemaViolation(e)
-        })?;
-        let se = SearchEvent::new_internal(f_valid);
-
-        let mut vs = self.search(&se)?;
-        match vs.pop() {
-            Some(entry) if vs.is_empty() => Ok(entry),
-            _ => Err(OperationError::NoMatchingEntries),
-        }
-    }
-
-    /// Get a single entry by its UUID, even if the entry in question
-    /// is in a masked state (recycled, tombstoned).
-    #[instrument(level = "debug", skip_all)]
-    fn internal_search_all_uuid(
-        &mut self,
-        uuid: Uuid,
-    ) -> Result<Arc<EntrySealedCommitted>, OperationError> {
-        let filter = filter_all!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
-        let f_valid = filter.validate(self.get_schema()).map_err(|e| {
-            error!(?e, "Filter Validate - SchemaViolation");
-            OperationError::SchemaViolation(e)
-        })?;
-        let se = SearchEvent::new_internal(f_valid);
-
-        let mut vs = self.search(&se)?;
-        match vs.pop() {
-            Some(entry) if vs.is_empty() => Ok(entry),
-            _ => Err(OperationError::NoMatchingEntries),
-        }
-    }
-
-    /// Get all conflict entries that originated from a source uuid.
-    #[instrument(level = "debug", skip_all)]
-    fn internal_search_conflict_uuid(
-        &mut self,
-        uuid: Uuid,
-    ) -> Result<Vec<Arc<EntrySealedCommitted>>, OperationError> {
-        let filter = filter_all!(f_and(vec![
-            f_eq(Attribute::SourceUuid, PartialValue::Uuid(uuid)),
-            f_eq(Attribute::Class, EntryClass::Conflict.into())
-        ]));
-        let f_valid = filter.validate(self.get_schema()).map_err(|e| {
-            error!(?e, "Filter Validate - SchemaViolation");
-            OperationError::SchemaViolation(e)
-        })?;
-        let se = SearchEvent::new_internal(f_valid);
-
-        self.search(&se)
-    }
-
     #[instrument(level = "debug", skip_all)]
     fn impersonate_search_ext_uuid(
         &mut self,
@@ -731,33 +639,191 @@ pub trait QueryServerTransactionPublic<'a> {
     }
 
     #[instrument(level = "debug", skip_all)]
-    fn impersonate_search_uuid(
-        &mut self,
-        uuid: Uuid,
-        event: &Identity,
-    ) -> Result<Arc<EntrySealedCommitted>, OperationError> {
-        let filter_intent = filter_all!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
-        let filter = filter!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
+    fn consumer_get_state(&mut self) -> Result<ReplRuvRange, OperationError> {
+        // Get the current state of "where we are up to"
+        //
+        // There are two approaches we can use here. We can either store a cookie
+        // related to the supplier we are fetching from, or we can use our RUV state.
+        //
+        // Initially I'm using RUV state, because it lets us select exactly what has
+        // changed, where the cookie approach is more coarse grained. The cookie also
+        // requires some more knowledge about what supplier we are communicating too
+        // where the RUV approach doesn't since the supplier calcs the diff.
+        //
+        // We need the RUV as a state of
+        //
+        // [ s_uuid, cid_min, cid_max ]
+        // [ s_uuid, cid_min, cid_max ]
+        // [ s_uuid, cid_min, cid_max ]
+        // ...
+        //
+        // This way the remote can diff against it's knowledge and work out:
+        //
+        // [ s_uuid, from_cid, to_cid ]
+        // [ s_uuid, from_cid, to_cid ]
+        //
+        // ...
 
-        let mut vs = self.impersonate_search(filter, filter_intent, event)?;
-        match vs.pop() {
-            Some(entry) if vs.is_empty() => Ok(entry),
-            _ => Err(OperationError::NoMatchingEntries),
-        }
+        let domain_uuid = self.get_domain_uuid();
+
+        // Which then the supplier will use to actually retrieve the set of entries.
+        // and the needed attributes we need.
+        let ruv_snapshot = self.get_be_txn().get_ruv();
+
+        // What's the current set of ranges?
+        ruv_snapshot
+            .current_ruv_range()
+            .map(|ranges| ReplRuvRange::V1 {
+                domain_uuid,
+                ranges,
+            })
     }
+}
 
-    /// Do a schema aware conversion from a String:String to String:Value for modification
-    /// present.
-    fn clone_value(&mut self, attr: &Attribute, value: &str) -> Result<Value, OperationError> {
-        let schema = self.get_schema();
+pub trait QueryServerTransaction<'a>:
+    sealed::QueryServerTransactionPrivate<'a> + QueryServerTransactionPublic<'a>
+{
+}
 
-        // Should this actually be a fn of Value - no - I think that introduces issues with the
-        // monomorphisation of the trait for transactions, so we should have this here.
+pub(crate) mod sealed {
+    use super::*;
 
-        // Lookup the attr
-        match schema.get_attributes().get(attr) {
-            Some(schema_a) => {
-                match schema_a.syntax {
+    pub trait QueryServerTransactionPrivate<'a>: QueryServerTransactionPublic<'a> {
+        /// From internal, generate an "exists" event and dispatch
+        #[instrument(level = "debug", skip_all)]
+        fn internal_exists(
+            &mut self,
+            filter: &Filter<FilterInvalid>,
+        ) -> Result<bool, OperationError> {
+            // Check the filter
+            let f_valid = filter
+                .validate(self.get_schema())
+                .map_err(OperationError::SchemaViolation)?;
+            // Build an exists event
+            let ee = ExistsEvent::new_internal(f_valid);
+            // Submit it
+            self.exists(&ee)
+        }
+
+        #[instrument(level = "debug", skip_all)]
+        fn internal_exists_uuid(&mut self, uuid: Uuid) -> Result<bool, OperationError> {
+            let filter = filter!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
+            self.internal_exists(&filter)
+        }
+
+        #[instrument(level = "debug", skip_all)]
+        fn internal_search(
+            &mut self,
+            filter: Filter<FilterInvalid>,
+        ) -> Result<Vec<Arc<EntrySealedCommitted>>, OperationError> {
+            let f_valid = filter
+                .validate(self.get_schema())
+                .map_err(OperationError::SchemaViolation)?;
+            let se = SearchEvent::new_internal(f_valid);
+            self.search(&se)
+        }
+
+        #[instrument(level = "debug", skip_all)]
+        fn impersonate_search_uuid(
+            &mut self,
+            uuid: Uuid,
+            event: &Identity,
+        ) -> Result<Arc<EntrySealedCommitted>, OperationError> {
+            let filter_intent = filter_all!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
+            let filter = filter!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
+
+            let mut vs = self.impersonate_search(filter, filter_intent, event)?;
+            match vs.pop() {
+                Some(entry) if vs.is_empty() => Ok(entry),
+                _ => Err(OperationError::NoMatchingEntries),
+            }
+        }
+
+        /// Get a single entry by its UUID. This is used heavily for internal
+        /// server operations, especially in login and ACP checks.
+        #[instrument(level = "debug", skip_all)]
+        fn internal_search_uuid(
+            &mut self,
+            uuid: Uuid,
+        ) -> Result<Arc<EntrySealedCommitted>, OperationError> {
+            let filter = filter!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
+            let f_valid = filter.validate(self.get_schema()).map_err(|e| {
+                error!(?e, "Filter Validate - SchemaViolation");
+                OperationError::SchemaViolation(e)
+            })?;
+            let se = SearchEvent::new_internal(f_valid);
+
+            let mut vs = self.search(&se)?;
+            match vs.pop() {
+                Some(entry) if vs.is_empty() => Ok(entry),
+                _ => Err(OperationError::NoMatchingEntries),
+            }
+        }
+
+        /// Get a single entry by its UUID, even if the entry in question
+        /// is in a masked state (recycled, tombstoned).
+        #[instrument(level = "debug", skip_all)]
+        fn internal_search_all_uuid(
+            &mut self,
+            uuid: Uuid,
+        ) -> Result<Arc<EntrySealedCommitted>, OperationError> {
+            let filter = filter_all!(f_eq(Attribute::Uuid, PartialValue::Uuid(uuid)));
+            let f_valid = filter.validate(self.get_schema()).map_err(|e| {
+                error!(?e, "Filter Validate - SchemaViolation");
+                OperationError::SchemaViolation(e)
+            })?;
+            let se = SearchEvent::new_internal(f_valid);
+
+            let mut vs = self.search(&se)?;
+            match vs.pop() {
+                Some(entry) if vs.is_empty() => Ok(entry),
+                _ => Err(OperationError::NoMatchingEntries),
+            }
+        }
+
+        /// Get all conflict entries that originated from a source uuid.
+        #[instrument(level = "debug", skip_all)]
+        fn internal_search_conflict_uuid(
+            &mut self,
+            uuid: Uuid,
+        ) -> Result<Vec<Arc<EntrySealedCommitted>>, OperationError> {
+            let filter = filter_all!(f_and(vec![
+                f_eq(Attribute::SourceUuid, PartialValue::Uuid(uuid)),
+                f_eq(Attribute::Class, EntryClass::Conflict.into())
+            ]));
+            let f_valid = filter.validate(self.get_schema()).map_err(|e| {
+                error!(?e, "Filter Validate - SchemaViolation");
+                OperationError::SchemaViolation(e)
+            })?;
+            let se = SearchEvent::new_internal(f_valid);
+
+            self.search(&se)
+        }
+
+        /// Given an entries UUID, return an impersonation session for that account. This
+        /// should be used with care, as it allows you to perform actions internally on
+        /// behalf of a another user, without checking the permissions of the original
+        /// user.
+        fn impersonate_uuid_as_readwrite_identity(
+            &mut self,
+            uuid: Uuid,
+        ) -> Result<Identity, OperationError> {
+            self.internal_search_uuid(uuid)
+                .map(Identity::from_impersonate_entry_readwrite)
+        }
+
+        /// Do a schema aware conversion from a String:String to String:Value for modification
+        /// present.
+        fn clone_value(&mut self, attr: &Attribute, value: &str) -> Result<Value, OperationError> {
+            let schema = self.get_schema();
+
+            // Should this actually be a fn of Value - no - I think that introduces issues with the
+            // monomorphisation of the trait for transactions, so we should have this here.
+
+            // Lookup the attr
+            match schema.get_attributes().get(attr) {
+                Some(schema_a) => {
+                    match schema_a.syntax {
                     SyntaxType::Utf8String => Ok(Value::new_utf8(value.to_string())),
                     SyntaxType::Utf8StringInsensitiveN => Ok(Value::new_iutf8n(value)),
                     SyntaxType::Utf8StringInsensitive => Ok(Value::new_iutf8(value)),
@@ -852,340 +918,362 @@ pub trait QueryServerTransactionPublic<'a> {
                     SyntaxType::Message => Err(OperationError::InvalidAttribute("Message values can not be supplied through modification".to_string())),
                     SyntaxType::UuidN => Err(OperationError::InvalidAttribute("Uuid-Set values can not be supplied through modification".to_string())),
                 }
-            }
-            None => {
-                // No attribute of this name exists - fail fast, there is no point to
-                // proceed, as nothing can be satisfied.
-                Err(OperationError::InvalidAttributeName(attr.to_string()))
-            }
-        }
-    }
-
-    fn clone_partialvalue(
-        &mut self,
-        attr: &Attribute,
-        value: &str,
-    ) -> Result<PartialValue, OperationError> {
-        let schema = self.get_schema();
-
-        // Lookup the attr
-        match schema.get_attributes().get(attr) {
-            Some(schema_a) => {
-                match schema_a.syntax {
-                    SyntaxType::Utf8String | SyntaxType::TotpSecret => {
-                        Ok(PartialValue::new_utf8(value.to_string()))
-                    }
-                    SyntaxType::Utf8StringInsensitive
-                    | SyntaxType::Utf8StringInsensitiveN
-                    | SyntaxType::JwsKeyEs256
-                    | SyntaxType::JwsKeyRs256 => Ok(PartialValue::new_iutf8(value)),
-                    SyntaxType::Utf8StringInameN | SyntaxType::Utf8StringIname => {
-                        Ok(PartialValue::new_iname(value))
-                    }
-                    SyntaxType::Boolean => PartialValue::new_bools(value).ok_or_else(|| {
-                        OperationError::InvalidAttribute("Invalid boolean syntax".to_string())
-                    }),
-                    SyntaxType::SyntaxId => PartialValue::new_syntaxs(value).ok_or_else(|| {
-                        OperationError::InvalidAttribute("Invalid Syntax syntax".to_string())
-                    }),
-                    SyntaxType::IndexId => PartialValue::new_indexes(value).ok_or_else(|| {
-                        OperationError::InvalidAttribute("Invalid Index syntax".to_string())
-                    }),
-                    SyntaxType::CredentialType => CredentialType::try_from(value)
-                        .map(PartialValue::CredentialType)
-                        .map_err(|()| {
-                            OperationError::InvalidAttribute(
-                                "Invalid credentialtype syntax".to_string(),
-                            )
-                        }),
-                    SyntaxType::Uuid | SyntaxType::UuidN => {
-                        let un = self.name_to_uuid(value).unwrap_or(UUID_DOES_NOT_EXIST);
-                        Ok(PartialValue::Uuid(un))
-                    }
-                    // ⚠️   Any types here need to also be added to update_attributes in
-                    // schema.rs for reference type / cache awareness during referential
-                    // integrity processing. Exceptions are self-contained value types!
-                    SyntaxType::ReferenceUuid
-                    | SyntaxType::ReferenceUuidN
-                    | SyntaxType::OauthScopeMap
-                    | SyntaxType::Session
-                    | SyntaxType::ApiToken
-                    | SyntaxType::Oauth2Session
-                    | SyntaxType::ApplicationPassword => {
-                        let un = self.name_to_uuid(value).unwrap_or(UUID_DOES_NOT_EXIST);
-                        Ok(PartialValue::Refer(un))
-                    }
-                    SyntaxType::OauthClaimMap => self
-                        .name_to_uuid(value)
-                        .map(PartialValue::Refer)
-                        .or_else(|_| Ok(PartialValue::new_iutf8(value))),
-
-                    SyntaxType::JsonFilter => {
-                        PartialValue::new_json_filter_s(value).ok_or_else(|| {
-                            OperationError::InvalidAttribute("Invalid Filter syntax".to_string())
-                        })
-                    }
-                    SyntaxType::Credential => Ok(PartialValue::new_credential_tag(value)),
-                    SyntaxType::SecretUtf8String => Ok(PartialValue::new_secret_str()),
-                    SyntaxType::SshKey => Ok(PartialValue::new_sshkey_tag_s(value)),
-                    SyntaxType::SecurityPrincipalName => {
-                        PartialValue::new_spn_s(value).ok_or_else(|| {
-                            OperationError::InvalidAttribute("Invalid spn syntax".to_string())
-                        })
-                    }
-                    SyntaxType::Uint32 => PartialValue::new_uint32_str(value).ok_or_else(|| {
-                        OperationError::InvalidAttribute("Invalid uint32 syntax".to_string())
-                    }),
-                    SyntaxType::Uint64 => PartialValue::new_uint64_str(value).ok_or_else(|| {
-                        OperationError::InvalidAttribute("Invalid uint64 syntax".to_string())
-                    }),
-                    SyntaxType::Int64 => PartialValue::new_int64_str(value).ok_or_else(|| {
-                        OperationError::InvalidAttribute("Invalid int64 syntax".to_string())
-                    }),
-                    SyntaxType::Cid => PartialValue::new_cid_s(value).ok_or_else(|| {
-                        OperationError::InvalidAttribute("Invalid cid syntax".to_string())
-                    }),
-                    SyntaxType::NsUniqueId => Ok(PartialValue::new_nsuniqueid_s(value)),
-                    SyntaxType::DateTime => PartialValue::new_datetime_s(value).ok_or_else(|| {
-                        OperationError::InvalidAttribute(
-                            "Invalid DateTime (rfc3339) syntax".to_string(),
-                        )
-                    }),
-                    SyntaxType::EmailAddress => Ok(PartialValue::new_email_address_s(value)),
-                    SyntaxType::UrlN | SyntaxType::Url => PartialValue::new_url_s(value)
-                        .ok_or_else(|| {
-                            OperationError::InvalidAttribute(
-                                "Invalid Url (whatwg/url) syntax".to_string(),
-                            )
-                        }),
-                    SyntaxType::OauthScope => Ok(PartialValue::new_oauthscope(value)),
-                    SyntaxType::PrivateBinary => Ok(PartialValue::PrivateBinary),
-                    SyntaxType::IntentToken => PartialValue::new_intenttoken_s(value.to_string())
-                        .ok_or_else(|| {
-                            OperationError::InvalidAttribute(
-                                "Invalid Intent Token ID (uuid) syntax".to_string(),
-                            )
-                        }),
-                    SyntaxType::Passkey => PartialValue::new_passkey_s(value).ok_or_else(|| {
-                        OperationError::InvalidAttribute("Invalid Passkey UUID syntax".to_string())
-                    }),
-                    SyntaxType::AttestedPasskey => PartialValue::new_attested_passkey_s(value)
-                        .ok_or_else(|| {
-                            OperationError::InvalidAttribute(
-                                "Invalid AttestedPasskey UUID syntax".to_string(),
-                            )
-                        }),
-                    SyntaxType::UiHint => UiHint::from_str(value)
-                        .map(PartialValue::UiHint)
-                        .map_err(|()| {
-                            OperationError::InvalidAttribute("Invalid uihint syntax".to_string())
-                        }),
-                    SyntaxType::AuditLogString => Ok(PartialValue::new_utf8s(value)),
-                    SyntaxType::EcKeyPrivate => Ok(PartialValue::SecretValue),
-                    SyntaxType::Image => Ok(PartialValue::new_utf8s(value)),
-                    SyntaxType::WebauthnAttestationCaList => Err(OperationError::InvalidAttribute(
-                        "Invalid - unable to query attestation CA list".to_string(),
-                    )),
-                    SyntaxType::HexString | SyntaxType::KeyInternal | SyntaxType::Certificate => {
-                        PartialValue::new_hex_string_s(value).ok_or_else(|| {
-                            OperationError::InvalidAttribute(
-                                "Invalid syntax, expected hex string".to_string(),
-                            )
-                        })
-                    }
-                    SyntaxType::Sha256 => {
-                        let mut sha256bytes = Sha256Output::default();
-                        if hex::decode_to_slice(value, &mut sha256bytes).is_ok() {
-                            Ok(PartialValue::Sha256(sha256bytes))
-                        } else {
-                            Err(OperationError::InvalidAttribute(
-                                "Invalid syntax, expected sha256 hex string containing 64 characters".to_string(),
-                            ))
-                        }
-                    }
-                    SyntaxType::Json => Err(OperationError::InvalidAttribute(
-                        "Json values can not be validated by this interface".to_string(),
-                    )),
-                    SyntaxType::Message => Err(OperationError::InvalidAttribute(
-                        "Message values can not be validated by this interface".to_string(),
-                    )),
+                }
+                None => {
+                    // No attribute of this name exists - fail fast, there is no point to
+                    // proceed, as nothing can be satisfied.
+                    Err(OperationError::InvalidAttributeName(attr.to_string()))
                 }
             }
-            None => {
-                // No attribute of this name exists - fail fast, there is no point to
-                // proceed, as nothing can be satisfied.
-                Err(OperationError::InvalidAttributeName(attr.to_string()))
+        }
+
+        fn clone_partialvalue(
+            &mut self,
+            attr: &Attribute,
+            value: &str,
+        ) -> Result<PartialValue, OperationError> {
+            let schema = self.get_schema();
+
+            // Lookup the attr
+            match schema.get_attributes().get(attr) {
+                Some(schema_a) => {
+                    match schema_a.syntax {
+                        SyntaxType::Utf8String | SyntaxType::TotpSecret => {
+                            Ok(PartialValue::new_utf8(value.to_string()))
+                        }
+                        SyntaxType::Utf8StringInsensitive
+                        | SyntaxType::Utf8StringInsensitiveN
+                        | SyntaxType::JwsKeyEs256
+                        | SyntaxType::JwsKeyRs256 => Ok(PartialValue::new_iutf8(value)),
+                        SyntaxType::Utf8StringInameN | SyntaxType::Utf8StringIname => {
+                            Ok(PartialValue::new_iname(value))
+                        }
+                        SyntaxType::Boolean => PartialValue::new_bools(value).ok_or_else(|| {
+                            OperationError::InvalidAttribute("Invalid boolean syntax".to_string())
+                        }),
+                        SyntaxType::SyntaxId => PartialValue::new_syntaxs(value).ok_or_else(|| {
+                            OperationError::InvalidAttribute("Invalid Syntax syntax".to_string())
+                        }),
+                        SyntaxType::IndexId => PartialValue::new_indexes(value).ok_or_else(|| {
+                            OperationError::InvalidAttribute("Invalid Index syntax".to_string())
+                        }),
+                        SyntaxType::CredentialType => CredentialType::try_from(value)
+                            .map(PartialValue::CredentialType)
+                            .map_err(|()| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid credentialtype syntax".to_string(),
+                                )
+                            }),
+                        SyntaxType::Uuid | SyntaxType::UuidN => {
+                            let un = self.name_to_uuid(value).unwrap_or(UUID_DOES_NOT_EXIST);
+                            Ok(PartialValue::Uuid(un))
+                        }
+                        // ⚠️   Any types here need to also be added to update_attributes in
+                        // schema.rs for reference type / cache awareness during referential
+                        // integrity processing. Exceptions are self-contained value types!
+                        SyntaxType::ReferenceUuid
+                        | SyntaxType::ReferenceUuidN
+                        | SyntaxType::OauthScopeMap
+                        | SyntaxType::Session
+                        | SyntaxType::ApiToken
+                        | SyntaxType::Oauth2Session
+                        | SyntaxType::ApplicationPassword => {
+                            let un = self.name_to_uuid(value).unwrap_or(UUID_DOES_NOT_EXIST);
+                            Ok(PartialValue::Refer(un))
+                        }
+                        SyntaxType::OauthClaimMap => self
+                            .name_to_uuid(value)
+                            .map(PartialValue::Refer)
+                            .or_else(|_| Ok(PartialValue::new_iutf8(value))),
+
+                        SyntaxType::JsonFilter => PartialValue::new_json_filter_s(value)
+                            .ok_or_else(|| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid Filter syntax".to_string(),
+                                )
+                            }),
+                        SyntaxType::Credential => Ok(PartialValue::new_credential_tag(value)),
+                        SyntaxType::SecretUtf8String => Ok(PartialValue::new_secret_str()),
+                        SyntaxType::SshKey => Ok(PartialValue::new_sshkey_tag_s(value)),
+                        SyntaxType::SecurityPrincipalName => PartialValue::new_spn_s(value)
+                            .ok_or_else(|| {
+                                OperationError::InvalidAttribute("Invalid spn syntax".to_string())
+                            }),
+                        SyntaxType::Uint32 => {
+                            PartialValue::new_uint32_str(value).ok_or_else(|| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid uint32 syntax".to_string(),
+                                )
+                            })
+                        }
+                        SyntaxType::Uint64 => {
+                            PartialValue::new_uint64_str(value).ok_or_else(|| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid uint64 syntax".to_string(),
+                                )
+                            })
+                        }
+                        SyntaxType::Int64 => PartialValue::new_int64_str(value).ok_or_else(|| {
+                            OperationError::InvalidAttribute("Invalid int64 syntax".to_string())
+                        }),
+                        SyntaxType::Cid => PartialValue::new_cid_s(value).ok_or_else(|| {
+                            OperationError::InvalidAttribute("Invalid cid syntax".to_string())
+                        }),
+                        SyntaxType::NsUniqueId => Ok(PartialValue::new_nsuniqueid_s(value)),
+                        SyntaxType::DateTime => {
+                            PartialValue::new_datetime_s(value).ok_or_else(|| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid DateTime (rfc3339) syntax".to_string(),
+                                )
+                            })
+                        }
+                        SyntaxType::EmailAddress => Ok(PartialValue::new_email_address_s(value)),
+                        SyntaxType::UrlN | SyntaxType::Url => PartialValue::new_url_s(value)
+                            .ok_or_else(|| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid Url (whatwg/url) syntax".to_string(),
+                                )
+                            }),
+                        SyntaxType::OauthScope => Ok(PartialValue::new_oauthscope(value)),
+                        SyntaxType::PrivateBinary => Ok(PartialValue::PrivateBinary),
+                        SyntaxType::IntentToken => {
+                            PartialValue::new_intenttoken_s(value.to_string()).ok_or_else(|| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid Intent Token ID (uuid) syntax".to_string(),
+                                )
+                            })
+                        }
+                        SyntaxType::Passkey => {
+                            PartialValue::new_passkey_s(value).ok_or_else(|| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid Passkey UUID syntax".to_string(),
+                                )
+                            })
+                        }
+                        SyntaxType::AttestedPasskey => PartialValue::new_attested_passkey_s(value)
+                            .ok_or_else(|| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid AttestedPasskey UUID syntax".to_string(),
+                                )
+                            }),
+                        SyntaxType::UiHint => UiHint::from_str(value)
+                            .map(PartialValue::UiHint)
+                            .map_err(|()| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid uihint syntax".to_string(),
+                                )
+                            }),
+                        SyntaxType::AuditLogString => Ok(PartialValue::new_utf8s(value)),
+                        SyntaxType::EcKeyPrivate => Ok(PartialValue::SecretValue),
+                        SyntaxType::Image => Ok(PartialValue::new_utf8s(value)),
+                        SyntaxType::WebauthnAttestationCaList => {
+                            Err(OperationError::InvalidAttribute(
+                                "Invalid - unable to query attestation CA list".to_string(),
+                            ))
+                        }
+                        SyntaxType::HexString
+                        | SyntaxType::KeyInternal
+                        | SyntaxType::Certificate => PartialValue::new_hex_string_s(value)
+                            .ok_or_else(|| {
+                                OperationError::InvalidAttribute(
+                                    "Invalid syntax, expected hex string".to_string(),
+                                )
+                            }),
+                        SyntaxType::Sha256 => {
+                            let mut sha256bytes = Sha256Output::default();
+                            if hex::decode_to_slice(value, &mut sha256bytes).is_ok() {
+                                Ok(PartialValue::Sha256(sha256bytes))
+                            } else {
+                                Err(OperationError::InvalidAttribute(
+                                "Invalid syntax, expected sha256 hex string containing 64 characters".to_string(),
+                            ))
+                            }
+                        }
+                        SyntaxType::Json => Err(OperationError::InvalidAttribute(
+                            "Json values can not be validated by this interface".to_string(),
+                        )),
+                        SyntaxType::Message => Err(OperationError::InvalidAttribute(
+                            "Message values can not be validated by this interface".to_string(),
+                        )),
+                    }
+                }
+                None => {
+                    // No attribute of this name exists - fail fast, there is no point to
+                    // proceed, as nothing can be satisfied.
+                    Err(OperationError::InvalidAttributeName(attr.to_string()))
+                }
             }
         }
-    }
 
-    fn resolve_scim_interim(
-        &mut self,
-        scim_value_intermediate: ScimValueIntermediate,
-    ) -> Result<Option<ScimValueKanidm>, OperationError> {
-        match scim_value_intermediate {
-            ScimValueIntermediate::Reference(uuid) => {
-                let scim_reference = self
-                    .uuid_to_spn(uuid)
-                    .and_then(|maybe_value| maybe_value.ok_or(OperationError::InvalidValueState))
-                    .map(|value| ScimReference {
-                        uuid,
-                        value: value.to_proto_string_clone(),
-                    })?;
-                Ok(Some(ScimValueKanidm::EntryReference(scim_reference)))
-            }
+        fn resolve_scim_interim(
+            &mut self,
+            scim_value_intermediate: ScimValueIntermediate,
+        ) -> Result<Option<ScimValueKanidm>, OperationError> {
+            match scim_value_intermediate {
+                ScimValueIntermediate::Reference(uuid) => {
+                    let scim_reference = self
+                        .uuid_to_spn(uuid)
+                        .and_then(|maybe_value| {
+                            maybe_value.ok_or(OperationError::InvalidValueState)
+                        })
+                        .map(|value| ScimReference {
+                            uuid,
+                            value: value.to_proto_string_clone(),
+                        })?;
+                    Ok(Some(ScimValueKanidm::EntryReference(scim_reference)))
+                }
 
-            ScimValueIntermediate::References(uuids) => {
-                let scim_references = uuids
-                    .into_iter()
-                    .map(|uuid| {
-                        self.uuid_to_spn(uuid)
-                            .and_then(|maybe_value| {
-                                maybe_value.ok_or(OperationError::InvalidValueState)
-                            })
-                            .map(|value| ScimReference {
-                                uuid,
-                                value: value.to_proto_string_clone(),
-                            })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(Some(ScimValueKanidm::EntryReferences(scim_references)))
-            }
-            ScimValueIntermediate::Oauth2ClaimMap(unresolved_maps) => {
-                let scim_claim_maps = unresolved_maps
-                    .into_iter()
-                    .map(
-                        |UnresolvedScimValueOauth2ClaimMap {
-                             group_uuid,
-                             claim,
-                             join_char,
-                             values,
-                         }| {
+                ScimValueIntermediate::References(uuids) => {
+                    let scim_references = uuids
+                        .into_iter()
+                        .map(|uuid| {
+                            self.uuid_to_spn(uuid)
+                                .and_then(|maybe_value| {
+                                    maybe_value.ok_or(OperationError::InvalidValueState)
+                                })
+                                .map(|value| ScimReference {
+                                    uuid,
+                                    value: value.to_proto_string_clone(),
+                                })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(Some(ScimValueKanidm::EntryReferences(scim_references)))
+                }
+                ScimValueIntermediate::Oauth2ClaimMap(unresolved_maps) => {
+                    let scim_claim_maps = unresolved_maps
+                        .into_iter()
+                        .map(
+                            |UnresolvedScimValueOauth2ClaimMap {
+                                 group_uuid,
+                                 claim,
+                                 join_char,
+                                 values,
+                             }| {
+                                self.uuid_to_spn(group_uuid)
+                                    .and_then(|maybe_value| {
+                                        maybe_value.ok_or(OperationError::InvalidValueState)
+                                    })
+                                    .map(|value| ScimOAuth2ClaimMap {
+                                        group: value.to_proto_string_clone(),
+                                        group_uuid,
+                                        claim,
+                                        join_char,
+                                        values,
+                                    })
+                            },
+                        )
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    Ok(Some(ScimValueKanidm::OAuth2ClaimMap(scim_claim_maps)))
+                }
+
+                ScimValueIntermediate::Oauth2ScopeMap(unresolved_maps) => {
+                    let scim_claim_maps = unresolved_maps
+                        .into_iter()
+                        .map(|UnresolvedScimValueOauth2ScopeMap { group_uuid, scopes }| {
                             self.uuid_to_spn(group_uuid)
                                 .and_then(|maybe_value| {
                                     maybe_value.ok_or(OperationError::InvalidValueState)
                                 })
-                                .map(|value| ScimOAuth2ClaimMap {
+                                .map(|value| ScimOAuth2ScopeMap {
                                     group: value.to_proto_string_clone(),
                                     group_uuid,
-                                    claim,
-                                    join_char,
-                                    values,
+                                    scopes,
                                 })
-                        },
-                    )
-                    .collect::<Result<Vec<_>, _>>()?;
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
 
-                Ok(Some(ScimValueKanidm::OAuth2ClaimMap(scim_claim_maps)))
-            }
-
-            ScimValueIntermediate::Oauth2ScopeMap(unresolved_maps) => {
-                let scim_claim_maps = unresolved_maps
-                    .into_iter()
-                    .map(|UnresolvedScimValueOauth2ScopeMap { group_uuid, scopes }| {
-                        self.uuid_to_spn(group_uuid)
-                            .and_then(|maybe_value| {
-                                maybe_value.ok_or(OperationError::InvalidValueState)
-                            })
-                            .map(|value| ScimOAuth2ScopeMap {
-                                group: value.to_proto_string_clone(),
-                                group_uuid,
-                                scopes,
-                            })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                Ok(Some(ScimValueKanidm::OAuth2ScopeMap(scim_claim_maps)))
+                    Ok(Some(ScimValueKanidm::OAuth2ScopeMap(scim_claim_maps)))
+                }
             }
         }
-    }
 
-    fn resolve_scim_json_get(
-        &mut self,
-        attr: &Attribute,
-        value: &JsonValue,
-    ) -> Result<PartialValue, OperationError> {
-        let schema = self.get_schema();
-        // Lookup the attr
-        let Some(schema_a) = schema.get_attributes().get(attr) else {
-            // No attribute of this name exists - fail fast, there is no point to
-            // proceed, as nothing can be satisfied.
-            return Err(OperationError::InvalidAttributeName(attr.to_string()));
-        };
+        fn resolve_scim_json_get(
+            &mut self,
+            attr: &Attribute,
+            value: &JsonValue,
+        ) -> Result<PartialValue, OperationError> {
+            let schema = self.get_schema();
+            // Lookup the attr
+            let Some(schema_a) = schema.get_attributes().get(attr) else {
+                // No attribute of this name exists - fail fast, there is no point to
+                // proceed, as nothing can be satisfied.
+                return Err(OperationError::InvalidAttributeName(attr.to_string()));
+            };
 
-        debug!(schema_syntax = ?schema_a.syntax, ?value);
+            debug!(schema_syntax = ?schema_a.syntax, ?value);
 
-        match schema_a.syntax {
-            SyntaxType::Utf8String => {
-                let JsonValue::String(value) = value else {
-                    return Err(OperationError::InvalidAttribute(attr.to_string()));
-                };
-                Ok(PartialValue::Utf8(value.to_string()))
-            }
-            SyntaxType::Utf8StringInsensitive | SyntaxType::Utf8StringInsensitiveN => {
-                let JsonValue::String(value) = value else {
-                    return Err(OperationError::InvalidAttribute(attr.to_string()));
-                };
-                Ok(PartialValue::new_iutf8(value))
-            }
-            SyntaxType::Utf8StringIname | SyntaxType::Utf8StringInameN => {
-                let JsonValue::String(value) = value else {
-                    return Err(OperationError::InvalidAttribute(attr.to_string()));
-                };
-                Ok(PartialValue::new_iname(value))
-            }
-            SyntaxType::Uuid | SyntaxType::UuidN => {
-                let JsonValue::String(value) = value else {
-                    return Err(OperationError::InvalidAttribute(attr.to_string()));
-                };
+            match schema_a.syntax {
+                SyntaxType::Utf8String => {
+                    let JsonValue::String(value) = value else {
+                        return Err(OperationError::InvalidAttribute(attr.to_string()));
+                    };
+                    Ok(PartialValue::Utf8(value.to_string()))
+                }
+                SyntaxType::Utf8StringInsensitive | SyntaxType::Utf8StringInsensitiveN => {
+                    let JsonValue::String(value) = value else {
+                        return Err(OperationError::InvalidAttribute(attr.to_string()));
+                    };
+                    Ok(PartialValue::new_iutf8(value))
+                }
+                SyntaxType::Utf8StringIname | SyntaxType::Utf8StringInameN => {
+                    let JsonValue::String(value) = value else {
+                        return Err(OperationError::InvalidAttribute(attr.to_string()));
+                    };
+                    Ok(PartialValue::new_iname(value))
+                }
+                SyntaxType::Uuid | SyntaxType::UuidN => {
+                    let JsonValue::String(value) = value else {
+                        return Err(OperationError::InvalidAttribute(attr.to_string()));
+                    };
 
-                let un = self.name_to_uuid(value).unwrap_or(UUID_DOES_NOT_EXIST);
-                Ok(PartialValue::Uuid(un))
-            }
-            SyntaxType::Boolean => {
-                let JsonValue::Bool(value) = value else {
-                    return Err(OperationError::InvalidAttribute(attr.to_string()));
-                };
-                Ok(PartialValue::Bool(*value))
-            }
-            SyntaxType::SyntaxId => {
-                let JsonValue::String(value) = value else {
-                    return Err(OperationError::InvalidAttribute(attr.to_string()));
-                };
-                let Ok(value) = SyntaxType::try_from(value.as_str()) else {
-                    return Err(OperationError::InvalidAttribute(attr.to_string()));
-                };
-                Ok(PartialValue::Syntax(value))
-            }
-            SyntaxType::ReferenceUuid
-            | SyntaxType::ReferenceUuidN
-            | SyntaxType::OauthScopeMap
-            | SyntaxType::Session
-            | SyntaxType::ApiToken
-            | SyntaxType::Oauth2Session
-            | SyntaxType::ApplicationPassword => {
-                let JsonValue::String(value) = value else {
-                    return Err(OperationError::InvalidAttribute(attr.to_string()));
-                };
+                    let un = self.name_to_uuid(value).unwrap_or(UUID_DOES_NOT_EXIST);
+                    Ok(PartialValue::Uuid(un))
+                }
+                SyntaxType::Boolean => {
+                    let JsonValue::Bool(value) = value else {
+                        return Err(OperationError::InvalidAttribute(attr.to_string()));
+                    };
+                    Ok(PartialValue::Bool(*value))
+                }
+                SyntaxType::SyntaxId => {
+                    let JsonValue::String(value) = value else {
+                        return Err(OperationError::InvalidAttribute(attr.to_string()));
+                    };
+                    let Ok(value) = SyntaxType::try_from(value.as_str()) else {
+                        return Err(OperationError::InvalidAttribute(attr.to_string()));
+                    };
+                    Ok(PartialValue::Syntax(value))
+                }
+                SyntaxType::ReferenceUuid
+                | SyntaxType::ReferenceUuidN
+                | SyntaxType::OauthScopeMap
+                | SyntaxType::Session
+                | SyntaxType::ApiToken
+                | SyntaxType::Oauth2Session
+                | SyntaxType::ApplicationPassword => {
+                    let JsonValue::String(value) = value else {
+                        return Err(OperationError::InvalidAttribute(attr.to_string()));
+                    };
 
-                let un = self.name_to_uuid(value).unwrap_or(UUID_DOES_NOT_EXIST);
-                Ok(PartialValue::Refer(un))
-            }
+                    let un = self.name_to_uuid(value).unwrap_or(UUID_DOES_NOT_EXIST);
+                    Ok(PartialValue::Refer(un))
+                }
 
-            syntax => {
-                debug!(?attr, ?syntax, "resolve_scim_json_get not implemented");
-                Err(OperationError::InvalidAttribute(attr.to_string()))
+                syntax => {
+                    debug!(?attr, ?syntax, "resolve_scim_json_get not implemented");
+                    Err(OperationError::InvalidAttribute(attr.to_string()))
+                }
             }
         }
-    }
 
-    fn resolve_valueset_intermediate(
-        &mut self,
-        vs_inter: ValueSetIntermediate,
-    ) -> Result<ValueSet, OperationError> {
-        match vs_inter {
-            ValueSetIntermediate::Reference(reference) => {
-                let resolved = match reference {
+        fn resolve_valueset_intermediate(
+            &mut self,
+            vs_inter: ValueSetIntermediate,
+        ) -> Result<ValueSet, OperationError> {
+            match vs_inter {
+                ValueSetIntermediate::Reference(reference) => {
+                    let resolved = match reference {
                             UnresolvedReferenceState::Uuid(uuid) => uuid,
                             UnresolvedReferenceState::Value(value) => {
                                 self.name_to_uuid(value.as_str()).unwrap_or_else(|_| {
@@ -1213,12 +1301,12 @@ pub trait QueryServerTransactionPublic<'a> {
                             }
                         };
 
-                let vs = ValueSetRefer::new(resolved);
-                Ok(vs)
-            }
+                    let vs = ValueSetRefer::new(resolved);
+                    Ok(vs)
+                }
 
-            ValueSetIntermediate::References { unresolved } => {
-                let resolved = unresolved.into_iter()
+                ValueSetIntermediate::References { unresolved } => {
+                    let resolved = unresolved.into_iter()
                     .map(|value| {
 
                         match value {
@@ -1251,288 +1339,215 @@ pub trait QueryServerTransactionPublic<'a> {
                     })
                     .collect();
 
-                let vs = ValueSetReferN::from_set(resolved);
-                Ok(vs)
-            }
+                    let vs = ValueSetReferN::from_set(resolved);
+                    Ok(vs)
+                }
 
-            ValueSetIntermediate::Oauth2ClaimMap {
-                mut resolved,
-                unresolved,
-            } => {
-                resolved.extend(unresolved.into_iter().map(
-                    |UnresolvedValueSetOauth2ClaimMap {
-                         group_name,
-                         claim,
-                         join_char,
-                         claim_values,
-                     }| {
-                        let group_uuid =
-                            self.name_to_uuid(group_name.as_str()).unwrap_or_else(|_| {
-                                warn!(
+                ValueSetIntermediate::Oauth2ClaimMap {
+                    mut resolved,
+                    unresolved,
+                } => {
+                    resolved.extend(unresolved.into_iter().map(
+                        |UnresolvedValueSetOauth2ClaimMap {
+                             group_name,
+                             claim,
+                             join_char,
+                             claim_values,
+                         }| {
+                            let group_uuid =
+                                self.name_to_uuid(group_name.as_str()).unwrap_or_else(|_| {
+                                    warn!(
                             ?group_name,
                             "Value can not be resolved to a uuid - assuming it does not exist."
                         );
-                                UUID_DOES_NOT_EXIST
-                            });
+                                    UUID_DOES_NOT_EXIST
+                                });
 
-                        ResolvedValueSetOauth2ClaimMap {
-                            group_uuid,
-                            claim,
-                            join_char,
-                            claim_values,
-                        }
-                    },
-                ));
+                            ResolvedValueSetOauth2ClaimMap {
+                                group_uuid,
+                                claim,
+                                join_char,
+                                claim_values,
+                            }
+                        },
+                    ));
 
-                let vs = ValueSetOauthClaimMap::from_set(resolved);
-                Ok(vs)
-            }
+                    let vs = ValueSetOauthClaimMap::from_set(resolved);
+                    Ok(vs)
+                }
 
-            ValueSetIntermediate::Oauth2ScopeMap {
-                mut resolved,
-                unresolved,
-            } => {
-                resolved.extend(unresolved.into_iter().map(
-                    |UnresolvedValueSetOauth2ScopeMap { group_name, scopes }| {
-                        let group_uuid =
-                            self.name_to_uuid(group_name.as_str()).unwrap_or_else(|_| {
-                                warn!(
+                ValueSetIntermediate::Oauth2ScopeMap {
+                    mut resolved,
+                    unresolved,
+                } => {
+                    resolved.extend(unresolved.into_iter().map(
+                        |UnresolvedValueSetOauth2ScopeMap { group_name, scopes }| {
+                            let group_uuid =
+                                self.name_to_uuid(group_name.as_str()).unwrap_or_else(|_| {
+                                    warn!(
                             ?group_name,
                             "Value can not be resolved to a uuid - assuming it does not exist."
                         );
-                                UUID_DOES_NOT_EXIST
-                            });
+                                    UUID_DOES_NOT_EXIST
+                                });
 
-                        ResolvedValueSetOauth2ScopeMap { group_uuid, scopes }
-                    },
-                ));
+                            ResolvedValueSetOauth2ScopeMap { group_uuid, scopes }
+                        },
+                    ));
 
-                let vs = ValueSetOauthScopeMap::from_set(resolved);
-                Ok(vs)
-            }
-        }
-    }
-
-    // In the opposite direction, we can resolve values for presentation
-    fn resolve_valueset(&mut self, value: &ValueSet) -> Result<Vec<String>, OperationError> {
-        if let Some(r_set) = value.as_refer_set() {
-            let v: Result<Vec<_>, _> = r_set
-                .iter()
-                .copied()
-                .map(|ur| {
-                    let nv = self.uuid_to_spn(ur)?;
-                    match nv {
-                        Some(v) => Ok(v.to_proto_string_clone()),
-                        None => Ok(uuid_to_proto_string(ur)),
-                    }
-                })
-                .collect();
-            v
-        } else if let Some(r_map) = value.as_oauthscopemap() {
-            let v: Result<Vec<_>, _> = r_map
-                .iter()
-                .map(|(u, m)| {
-                    let nv = self.uuid_to_spn(*u)?;
-                    let u = match nv {
-                        Some(v) => v.to_proto_string_clone(),
-                        None => uuid_to_proto_string(*u),
-                    };
-                    Ok(format!("{u}: {m:?}"))
-                })
-                .collect();
-            v
-        } else if let Some(r_map) = value.as_oauthclaim_map() {
-            let mut v = Vec::with_capacity(0);
-            for (claim_name, mapping) in r_map.iter() {
-                for (group_ref, claims) in mapping.values() {
-                    let join_char = mapping.join().to_str();
-
-                    let nv = self.uuid_to_spn(*group_ref)?;
-                    let resolved_id = match nv {
-                        Some(v) => v.to_proto_string_clone(),
-                        None => uuid_to_proto_string(*group_ref),
-                    };
-
-                    let joined = str_concat!(claims, ",");
-
-                    v.push(format!("{claim_name}:{resolved_id}:{join_char}:{joined:?}"))
+                    let vs = ValueSetOauthScopeMap::from_set(resolved);
+                    Ok(vs)
                 }
             }
-            Ok(v)
-        } else {
-            let v: Vec<_> = value.to_proto_string_clone_iter().collect();
-            Ok(v)
         }
-    }
 
-    fn resolve_valueset_ldap(
-        &mut self,
-        value: &ValueSet,
-        basedn: &str,
-    ) -> Result<Vec<Vec<u8>>, OperationError> {
-        if let Some(r_set) = value.as_refer_set() {
-            let v: Result<Vec<_>, _> = r_set
-                .iter()
-                .copied()
-                .map(|ur| {
-                    let rdn = self.uuid_to_rdn(ur)?;
-                    Ok(format!("{rdn},{basedn}").into_bytes())
-                })
-                .collect();
-            v
-        // We have to special case ssh keys here as the proto form isn't valid for
-        // sss_ssh_authorized_keys to consume.
-        } else if let Some(key_iter) = value.as_sshpubkey_string_iter() {
-            let v: Vec<_> = key_iter.map(|s| s.into_bytes()).collect();
-            Ok(v)
-        } else {
-            let v: Vec<_> = value
-                .to_proto_string_clone_iter()
-                .map(|s| s.into_bytes())
-                .collect();
-            Ok(v)
+        // In the opposite direction, we can resolve values for presentation
+        fn resolve_valueset(&mut self, value: &ValueSet) -> Result<Vec<String>, OperationError> {
+            if let Some(r_set) = value.as_refer_set() {
+                let v: Result<Vec<_>, _> = r_set
+                    .iter()
+                    .copied()
+                    .map(|ur| {
+                        let nv = self.uuid_to_spn(ur)?;
+                        match nv {
+                            Some(v) => Ok(v.to_proto_string_clone()),
+                            None => Ok(uuid_to_proto_string(ur)),
+                        }
+                    })
+                    .collect();
+                v
+            } else if let Some(r_map) = value.as_oauthscopemap() {
+                let v: Result<Vec<_>, _> = r_map
+                    .iter()
+                    .map(|(u, m)| {
+                        let nv = self.uuid_to_spn(*u)?;
+                        let u = match nv {
+                            Some(v) => v.to_proto_string_clone(),
+                            None => uuid_to_proto_string(*u),
+                        };
+                        Ok(format!("{u}: {m:?}"))
+                    })
+                    .collect();
+                v
+            } else if let Some(r_map) = value.as_oauthclaim_map() {
+                let mut v = Vec::with_capacity(0);
+                for (claim_name, mapping) in r_map.iter() {
+                    for (group_ref, claims) in mapping.values() {
+                        let join_char = mapping.join().to_str();
+
+                        let nv = self.uuid_to_spn(*group_ref)?;
+                        let resolved_id = match nv {
+                            Some(v) => v.to_proto_string_clone(),
+                            None => uuid_to_proto_string(*group_ref),
+                        };
+
+                        let joined = str_concat!(claims, ",");
+
+                        v.push(format!("{claim_name}:{resolved_id}:{join_char}:{joined:?}"))
+                    }
+                }
+                Ok(v)
+            } else {
+                let v: Vec<_> = value.to_proto_string_clone_iter().collect();
+                Ok(v)
+            }
         }
-    }
 
-    fn get_db_domain(&mut self) -> Result<Arc<EntrySealedCommitted>, OperationError> {
-        self.internal_search_uuid(UUID_DOMAIN_INFO)
-    }
-
-    fn get_domain_key_object_handle(&self) -> Result<Arc<KeyObject>, OperationError> {
-        self.get_key_providers()
-            .get_key_object_handle(UUID_DOMAIN_INFO)
-            .ok_or(OperationError::KP0031KeyObjectNotFound)
-    }
-
-    fn get_domain_es256_private_key(&mut self) -> Result<Vec<u8>, OperationError> {
-        self.internal_search_uuid(UUID_DOMAIN_INFO)
-            .and_then(|e| {
-                e.get_ava_single_private_binary(Attribute::Es256PrivateKeyDer)
-                    .map(|s| s.to_vec())
-                    .ok_or(OperationError::InvalidEntryState)
-            })
-            .map_err(|e| {
-                admin_error!(?e, "Error getting domain es256 key");
-                e
-            })
-    }
-
-    fn get_domain_ldap_allow_unix_pw_bind(&mut self) -> Result<bool, OperationError> {
-        self.internal_search_uuid(UUID_DOMAIN_INFO).map(|entry| {
-            entry
-                .get_ava_single_bool(Attribute::LdapAllowUnixPwBind)
-                .unwrap_or(true)
-        })
-    }
-
-    /// Get the password badlist from the system config. You should not call this directly
-    /// as this value is cached in the system_config() value.
-    fn get_sc_password_badlist(&mut self) -> Result<HashSet<String>, OperationError> {
-        self.internal_search_uuid(UUID_SYSTEM_CONFIG)
-            .map(|e| match e.get_ava_iter_iutf8(Attribute::BadlistPassword) {
-                Some(vs_str_iter) => vs_str_iter.map(str::to_string).collect::<HashSet<_>>(),
-                None => HashSet::default(),
-            })
-            .map_err(|e| {
-                error!(
-                    ?e,
-                    "Failed to retrieve password badlist from system configuration"
-                );
-                e
-            })
-    }
-
-    /// Get the denied name set from the system config. You should not call this directly
-    /// as this value is cached in the system_config() value.
-    fn get_sc_denied_names(&mut self) -> Result<HashSet<String>, OperationError> {
-        self.internal_search_uuid(UUID_SYSTEM_CONFIG)
-            .map(|e| match e.get_ava_iter_iname(Attribute::DeniedName) {
-                Some(vs_str_iter) => vs_str_iter.map(str::to_string).collect::<HashSet<_>>(),
-                None => HashSet::default(),
-            })
-            .map_err(|e| {
-                error!(
-                    ?e,
-                    "Failed to retrieve denied names from system configuration"
-                );
-                e
-            })
-    }
-
-    fn get_oauth2rs_set(&mut self) -> Result<Vec<Arc<EntrySealedCommitted>>, OperationError> {
-        self.internal_search(filter!(f_eq(
-            Attribute::Class,
-            EntryClass::OAuth2ResourceServer.into(),
-        )))
-    }
-
-    fn get_applications_set(&mut self) -> Result<Vec<Arc<EntrySealedCommitted>>, OperationError> {
-        self.internal_search(filter!(f_eq(
-            Attribute::Class,
-            EntryClass::Application.into(),
-        )))
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    fn consumer_get_state(&mut self) -> Result<ReplRuvRange, OperationError> {
-        // Get the current state of "where we are up to"
-        //
-        // There are two approaches we can use here. We can either store a cookie
-        // related to the supplier we are fetching from, or we can use our RUV state.
-        //
-        // Initially I'm using RUV state, because it lets us select exactly what has
-        // changed, where the cookie approach is more coarse grained. The cookie also
-        // requires some more knowledge about what supplier we are communicating too
-        // where the RUV approach doesn't since the supplier calcs the diff.
-        //
-        // We need the RUV as a state of
-        //
-        // [ s_uuid, cid_min, cid_max ]
-        // [ s_uuid, cid_min, cid_max ]
-        // [ s_uuid, cid_min, cid_max ]
-        // ...
-        //
-        // This way the remote can diff against it's knowledge and work out:
-        //
-        // [ s_uuid, from_cid, to_cid ]
-        // [ s_uuid, from_cid, to_cid ]
-        //
-        // ...
-
-        let domain_uuid = self.get_domain_uuid();
-
-        // Which then the supplier will use to actually retrieve the set of entries.
-        // and the needed attributes we need.
-        let ruv_snapshot = self.get_be_txn().get_ruv();
-
-        // What's the current set of ranges?
-        ruv_snapshot
-            .current_ruv_range()
-            .map(|ranges| ReplRuvRange::V1 {
-                domain_uuid,
-                ranges,
-            })
-    }
-}
-
-pub trait QueryServerTransaction<'a>: sealed::QueryServerTransactionPrivate<'a> + QueryServerTransactionPublic<'a> {
-}
-
-pub(crate) mod sealed {
-    use super::*;
-
-    pub trait QueryServerTransactionPrivate<'a>: QueryServerTransactionPublic<'a> {
-
-        /// Given an entries UUID, return an impersonation session for that account. This
-        /// should be used with care, as it allows you to perform actions internally on
-        /// behalf of a another user, without checking the permissions of the original
-        /// user.
-        fn impersonate_uuid_as_readwrite_identity(
+        fn resolve_valueset_ldap(
             &mut self,
-            uuid: Uuid,
-        ) -> Result<Identity, OperationError> {
-            self.internal_search_uuid(uuid)
-                .map(Identity::from_impersonate_entry_readwrite)
+            value: &ValueSet,
+            basedn: &str,
+        ) -> Result<Vec<Vec<u8>>, OperationError> {
+            if let Some(r_set) = value.as_refer_set() {
+                let v: Result<Vec<_>, _> = r_set
+                    .iter()
+                    .copied()
+                    .map(|ur| {
+                        let rdn = self.uuid_to_rdn(ur)?;
+                        Ok(format!("{rdn},{basedn}").into_bytes())
+                    })
+                    .collect();
+                v
+            // We have to special case ssh keys here as the proto form isn't valid for
+            // sss_ssh_authorized_keys to consume.
+            } else if let Some(key_iter) = value.as_sshpubkey_string_iter() {
+                let v: Vec<_> = key_iter.map(|s| s.into_bytes()).collect();
+                Ok(v)
+            } else {
+                let v: Vec<_> = value
+                    .to_proto_string_clone_iter()
+                    .map(|s| s.into_bytes())
+                    .collect();
+                Ok(v)
+            }
+        }
+
+        fn get_db_domain(&mut self) -> Result<Arc<EntrySealedCommitted>, OperationError> {
+            self.internal_search_uuid(UUID_DOMAIN_INFO)
+        }
+
+        fn get_domain_key_object_handle(&self) -> Result<Arc<KeyObject>, OperationError> {
+            self.get_key_providers()
+                .get_key_object_handle(UUID_DOMAIN_INFO)
+                .ok_or(OperationError::KP0031KeyObjectNotFound)
+        }
+
+        fn get_domain_ldap_allow_unix_pw_bind(&mut self) -> Result<bool, OperationError> {
+            self.internal_search_uuid(UUID_DOMAIN_INFO).map(|entry| {
+                entry
+                    .get_ava_single_bool(Attribute::LdapAllowUnixPwBind)
+                    .unwrap_or(true)
+            })
+        }
+
+        /// Get the password badlist from the system config. You should not call this directly
+        /// as this value is cached in the system_config() value.
+        fn get_sc_password_badlist(&mut self) -> Result<HashSet<String>, OperationError> {
+            self.internal_search_uuid(UUID_SYSTEM_CONFIG)
+                .map(|e| match e.get_ava_iter_iutf8(Attribute::BadlistPassword) {
+                    Some(vs_str_iter) => vs_str_iter.map(str::to_string).collect::<HashSet<_>>(),
+                    None => HashSet::default(),
+                })
+                .map_err(|e| {
+                    error!(
+                        ?e,
+                        "Failed to retrieve password badlist from system configuration"
+                    );
+                    e
+                })
+        }
+
+        /// Get the denied name set from the system config. You should not call this directly
+        /// as this value is cached in the system_config() value.
+        fn get_sc_denied_names(&mut self) -> Result<HashSet<String>, OperationError> {
+            self.internal_search_uuid(UUID_SYSTEM_CONFIG)
+                .map(|e| match e.get_ava_iter_iname(Attribute::DeniedName) {
+                    Some(vs_str_iter) => vs_str_iter.map(str::to_string).collect::<HashSet<_>>(),
+                    None => HashSet::default(),
+                })
+                .map_err(|e| {
+                    error!(
+                        ?e,
+                        "Failed to retrieve denied names from system configuration"
+                    );
+                    e
+                })
+        }
+
+        fn get_oauth2rs_set(&mut self) -> Result<Vec<Arc<EntrySealedCommitted>>, OperationError> {
+            self.internal_search(filter!(f_eq(
+                Attribute::Class,
+                EntryClass::OAuth2ResourceServer.into(),
+            )))
+        }
+
+        fn get_applications_set(
+            &mut self,
+        ) -> Result<Vec<Arc<EntrySealedCommitted>>, OperationError> {
+            self.internal_search(filter!(f_eq(
+                Attribute::Class,
+                EntryClass::Application.into(),
+            )))
         }
     }
 }
@@ -1634,11 +1649,9 @@ impl<'a> QueryServerTransactionPublic<'a> for QueryServerReadTransaction<'a> {
     }
 }
 
-impl<'a> sealed::QueryServerTransactionPrivate<'a> for QueryServerReadTransaction<'a> {
-}
+impl<'a> sealed::QueryServerTransactionPrivate<'a> for QueryServerReadTransaction<'a> {}
 
-impl<'a> QueryServerTransaction<'a> for QueryServerReadTransaction<'a> {
-}
+impl<'a> QueryServerTransaction<'a> for QueryServerReadTransaction<'a> {}
 
 impl QueryServerReadTransaction<'_> {
     pub(crate) fn trim_cid(&self) -> &Cid {
@@ -1999,11 +2012,9 @@ impl<'a> QueryServerTransactionPublic<'a> for QueryServerWriteTransaction<'a> {
     }
 }
 
-impl<'a> sealed::QueryServerTransactionPrivate<'a> for QueryServerWriteTransaction<'a> {
-}
+impl<'a> sealed::QueryServerTransactionPrivate<'a> for QueryServerWriteTransaction<'a> {}
 
-impl<'a> QueryServerTransaction<'a> for QueryServerWriteTransaction<'a> {
-}
+impl<'a> QueryServerTransaction<'a> for QueryServerWriteTransaction<'a> {}
 
 impl QueryServer {
     pub fn new(

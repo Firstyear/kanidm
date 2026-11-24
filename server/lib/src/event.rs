@@ -328,7 +328,7 @@ impl SearchEvent {
         }
     }
 
-    pub fn new_internal(filter: Filter<FilterValid>) -> Self {
+    pub(crate) fn new_internal(filter: Filter<FilterValid>) -> Self {
         SearchEvent {
             ident: Identity::from_internal(),
             filter: filter.clone(),

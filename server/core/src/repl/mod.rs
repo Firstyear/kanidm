@@ -6,7 +6,7 @@ use futures_util::{sink::SinkExt, stream::StreamExt};
 use kanidmd_lib::{
     prelude::{duration_from_epoch_now, IdmServer},
     repl::proto::ConsumerState,
-    server::{QueryServerTransactionPublic},
+    server::QueryServerTransactionPublic,
 };
 use rustls::{
     client::ClientConfig,
