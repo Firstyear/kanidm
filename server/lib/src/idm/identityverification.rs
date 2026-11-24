@@ -2,7 +2,7 @@ use crate::{
     credential::totp::{Totp, TotpAlgo, TotpDigits},
     idm::server::IdmServerProxyReadTransaction,
     prelude::*,
-    server::{identity::Identity, keys::KeyProvidersTransaction, QueryServerTransaction},
+    server::{identity::Identity, keys::KeyProvidersTransaction},
 };
 use crypto_glue::hmac_s256::HmacSha256Key;
 use kanidm_proto::internal::IdentifyUserResponse;

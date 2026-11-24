@@ -110,10 +110,14 @@ pub mod prelude {
                 AccessScope, IdentType, IdentUser, Identity, IdentityId, InternalRole, Source,
             },
             QueryServer, QueryServerReadTransaction, QueryServerTransaction,
+            QueryServerTransactionPublic,
             QueryServerWriteTransaction,
         },
         time::duration_from_epoch_now,
         value::{ApiTokenScope, IndexType, PartialValue, SessionScope, SyntaxType, Value},
+    };
+    pub(crate) use crate::server::{
+        sealed::QueryServerTransactionPrivate,
     };
     pub(crate) use kanidm_proto::scim_v1::{
         server::{ScimEntryKanidm, ScimValueKanidm},

@@ -283,7 +283,7 @@ impl QueryServerWriteTransaction<'_> {
 ///
 /// [`QueryServerReadTransaction`]: struct.QueryServerReadTransaction.html
 /// [`QueryServerWriteTransaction`]: struct.QueryServerWriteTransaction.html
-pub trait QueryServerTransaction<'a> {
+pub trait QueryServerTransactionPublic<'a> {
     type BackendTransactionType: BackendTransaction;
     fn get_be_txn(&mut self) -> &mut Self::BackendTransactionType;
 
@@ -744,18 +744,6 @@ pub trait QueryServerTransaction<'a> {
             Some(entry) if vs.is_empty() => Ok(entry),
             _ => Err(OperationError::NoMatchingEntries),
         }
-    }
-
-    /// Given an entries UUID, return an impersonation session for that account. This
-    /// should be used with care, as it allows you to perform actions internally on
-    /// behalf of a another user, without checking the permissions of the original
-    /// user.
-    fn impersonate_uuid_as_readwrite_identity(
-        &mut self,
-        uuid: Uuid,
-    ) -> Result<Identity, OperationError> {
-        self.internal_search_uuid(uuid)
-            .map(Identity::from_impersonate_entry_readwrite)
     }
 
     /// Do a schema aware conversion from a String:String to String:Value for modification
@@ -1527,10 +1515,32 @@ pub trait QueryServerTransaction<'a> {
     }
 }
 
+pub trait QueryServerTransaction<'a>: sealed::QueryServerTransactionPrivate<'a> + QueryServerTransactionPublic<'a> {
+}
+
+pub(crate) mod sealed {
+    use super::*;
+
+    pub trait QueryServerTransactionPrivate<'a>: QueryServerTransactionPublic<'a> {
+
+        /// Given an entries UUID, return an impersonation session for that account. This
+        /// should be used with care, as it allows you to perform actions internally on
+        /// behalf of a another user, without checking the permissions of the original
+        /// user.
+        fn impersonate_uuid_as_readwrite_identity(
+            &mut self,
+            uuid: Uuid,
+        ) -> Result<Identity, OperationError> {
+            self.internal_search_uuid(uuid)
+                .map(Identity::from_impersonate_entry_readwrite)
+        }
+    }
+}
+
 // Actually conduct a search request
 // This is the core of the server, as it processes the entire event
 // applies all parts required in order and more.
-impl<'a> QueryServerTransaction<'a> for QueryServerReadTransaction<'a> {
+impl<'a> QueryServerTransactionPublic<'a> for QueryServerReadTransaction<'a> {
     type AccessControlsTransactionType = AccessControlsReadTransaction<'a>;
     type BackendTransactionType = BackendReadTransaction<'a>;
     type SchemaTransactionType = SchemaReadTransaction;
@@ -1622,6 +1632,12 @@ impl<'a> QueryServerTransaction<'a> for QueryServerReadTransaction<'a> {
     fn get_domain_image_value(&self) -> Option<ImageValue> {
         self.d_info.d_image.clone()
     }
+}
+
+impl<'a> sealed::QueryServerTransactionPrivate<'a> for QueryServerReadTransaction<'a> {
+}
+
+impl<'a> QueryServerTransaction<'a> for QueryServerReadTransaction<'a> {
 }
 
 impl QueryServerReadTransaction<'_> {
@@ -1880,7 +1896,7 @@ impl QueryServerReadTransaction<'_> {
     }
 }
 
-impl<'a> QueryServerTransaction<'a> for QueryServerWriteTransaction<'a> {
+impl<'a> QueryServerTransactionPublic<'a> for QueryServerWriteTransaction<'a> {
     type AccessControlsTransactionType = AccessControlsWriteTransaction<'a>;
     type BackendTransactionType = BackendWriteTransaction<'a>;
     type SchemaTransactionType = SchemaWriteTransaction<'a>;
@@ -1981,6 +1997,12 @@ impl<'a> QueryServerTransaction<'a> for QueryServerWriteTransaction<'a> {
     fn get_domain_image_value(&self) -> Option<ImageValue> {
         self.d_info.d_image.clone()
     }
+}
+
+impl<'a> sealed::QueryServerTransactionPrivate<'a> for QueryServerWriteTransaction<'a> {
+}
+
+impl<'a> QueryServerTransaction<'a> for QueryServerWriteTransaction<'a> {
 }
 
 impl QueryServer {
