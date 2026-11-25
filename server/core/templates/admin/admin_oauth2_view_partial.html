@@ -1,0 +1,47 @@
+(% extends "admin/admin_partial_base.html" %)
+
+(% block oauth2_item_extra_classes %)active(% endblock %)
+
+(% block admin_page %)
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active" aria-current="page">OAuth2</li>
+    </ol>
+</nav>
+
+<h4 class="mb-3">Create new OAuth Resource Server</h4>
+
+<form hx-boost="true"
+        hx-post="/ui/api/admin/oauth2/create"
+        hx-target="#oauth2"
+        hx-swap="afterbegin">
+    <div class="col-12 col-md-11 col-lg-8">
+        <div class="input-group">
+            <input type="text" class="form-control" id="add-oauth2-button" name="name"
+                aria-label="Name of oauth2 respurce server to add" placeholder="oauth2 server name"
+                aria-describedby="add-oauth2-button">
+            <button class="btn btn-primary float-end" id="add-person-button">Add Resource Server</button>
+        </div>
+    </div>
+</form>
+
+<h4 class="mt-3 mb-2">Overview</h4>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th scope="col"><span class="ms-4">Name</span></th>
+            <th scope="col" class="d-none d-md-table-cell">UUID</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody id="oauth2">
+    (% for (rs, _) in resources %)
+        (% let oauth2_uuid = rs.uuid %)
+        (% let oauth2_name = rs.name %)
+        (% let oauth2_display_name = rs.display_name %)
+        (% include "admin_oauth2_entry_partial.html" %)
+    (% endfor %)
+    </tbody>
+</table>
+(% endblock %)
