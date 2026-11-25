@@ -1,5 +1,9 @@
-use filetime::FileTime;
-use std::{fs::File, io::ErrorKind, path::Path, time::SystemTime};
+use std::{
+    fs::{self, File, FileTimes},
+    io::ErrorKind,
+    path::Path,
+    time::SystemTime,
+};
 
 pub fn touch_file_or_quit<P: AsRef<Path>>(file_path: P) {
     /*
@@ -11,14 +15,17 @@ pub fn touch_file_or_quit<P: AsRef<Path>>(file_path: P) {
     let file_path: &Path = file_path.as_ref();
 
     if file_path.exists() {
-        let t = FileTime::from_system_time(SystemTime::now());
-        match filetime::set_file_times(file_path, t, t) {
-            Ok(_) => debug!(
+        let now = SystemTime::now();
+
+        let file_time = FileTimes::new().set_accessed(now).set_modified(now);
+
+        match fs::set_times(file_path, file_time) {
+            Ok(()) => debug!(
                 "Successfully touched existing file {}, can continue",
                 file_path.display()
             ),
-            Err(e) => {
-                match e.kind() {
+            Err(err) => {
+                match err.kind() {
                     ErrorKind::PermissionDenied => {
                         // we bail here because you won't be able to write them back...
                         error!(
@@ -28,9 +35,9 @@ pub fn touch_file_or_quit<P: AsRef<Path>>(file_path: P) {
                     }
                     _ => {
                         error!(
-                            "Failed to write to {} due to error: {:?} ... quitting.",
+                            ?err,
+                            "Failed to write to {} due to error ... quitting.",
                             file_path.display(),
-                            e
                         )
                     }
                 }
@@ -39,12 +46,12 @@ pub fn touch_file_or_quit<P: AsRef<Path>>(file_path: P) {
         }
     } else {
         match File::create(file_path) {
-            Ok(_) => debug!("Successfully touched new file {}", file_path.display()),
-            Err(e) => {
+            Ok(_file) => debug!("Successfully touched new file {}", file_path.display()),
+            Err(err) => {
                 error!(
-                    "Failed to write to {} due to error: {:?} ... quitting.",
+                    ?err,
+                    "Failed to write to {} due to error ... quitting.",
                     file_path.display(),
-                    e
                 );
                 std::process::exit(1);
             }

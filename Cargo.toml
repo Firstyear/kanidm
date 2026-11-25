@@ -4,7 +4,7 @@ authors = [
     "William Brown <william@blackhats.net.au>",
     "James Hodgkinson <james@terminaloutcomes.com>",
 ]
-rust-version = "1.96"
+rust-version = "1.99"
 edition = "2021"
 license = "MPL-2.0"
 repository = "https://github.com/kanidm/kanidm/"
@@ -193,7 +193,6 @@ dhat = "0.3.3"
 dyn-clone = "^1.0.20"
 enum-iterator = "2.3.0"
 # fantoccini = "0.22.0"
-filetime = "^0.2.29"
 # fs4 = "^1.0.2"
 futures = "^0.3.32"
 futures-util = { version = "^0.3.32", features = ["sink"] }
