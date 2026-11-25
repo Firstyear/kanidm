@@ -46,6 +46,10 @@ pub const DOMAIN_LEVEL_0: DomainVersion = 0;
 /// within a release cycle, and should not be changed otherwise.
 pub const PATCH_LEVEL_2: u32 = 2;
 
+/// The domain's patch level - this is used for emergency migrations
+/// within a release cycle, and should not be changed otherwise.
+pub const PATCH_LEVEL_3: u32 = 3;
+
 /// Domain Level introduced with 1.6.0.
 /// Deprecated as of 1.8.0
 pub const DOMAIN_LEVEL_10: DomainVersion = 10;
@@ -88,7 +92,7 @@ pub const DOMAIN_LEVEL_1_14: DomainVersion = 18;
 // the corresponding level.
 pub const DOMAIN_TGT_LEVEL: DomainVersion = DOMAIN_LEVEL_1_13;
 // The current patch level if any out of band fixes are required.
-pub const DOMAIN_TGT_PATCH_LEVEL: u32 = PATCH_LEVEL_2;
+pub const DOMAIN_TGT_PATCH_LEVEL: u32 = PATCH_LEVEL_3;
 
 // The maximum supported domain functional level. This generally
 // represents a *future* version of the server which doesn't exist

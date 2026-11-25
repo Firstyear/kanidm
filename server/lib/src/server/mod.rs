@@ -2774,6 +2774,14 @@ impl<'a> QueryServerWriteTransaction<'a> {
         }
         */
 
+        if previous_patch_level < PATCH_LEVEL_3
+            && domain_info_patch_level >= PATCH_LEVEL_3
+            && domain_info_version == DOMAIN_LEVEL_1_12
+        {
+            // Re-run the server migrations to apply the fix for access controls
+            self.migrate_domain_1_11_to_1_12()?;
+        }
+
         // This is to catch during development if we incorrectly move MIN_REMIGRATION but
         // without actually updating these values correctly.
         const { assert!(DOMAIN_MIN_REMIGRATION_LEVEL <= DOMAIN_PREVIOUS_TGT_LEVEL) };
