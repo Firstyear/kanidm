@@ -217,7 +217,7 @@ impl QueryServer {
                 .map(|()| {
                     warn!(
                         "Domain patch level has been raised to {}",
-                        domain_patch_level
+                        DOMAIN_TGT_PATCH_LEVEL
                     );
                 })?;
 
