@@ -43,6 +43,7 @@ impl QueryServerWriteV1 {
 }
 
 pub mod internal;
+pub mod models;
 pub mod read_action;
 pub mod v1_read;
 pub mod v1_scim;

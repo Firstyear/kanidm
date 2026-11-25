@@ -1,0 +1,16 @@
+<tr hx-target="this">
+    <td class="position-relative">
+        <span class="me-1">👥</span>
+        <a href="/ui/admin/oauth2/(( oauth2_uuid ))/view" hx-target="#main" 
+        class="stretched-link text-decoration-none">(( oauth2_name ))</a>
+        <br><span class="ms-4 small">(( oauth2_display_name ))</span>
+    </td>
+    <td class="font-monospace text-secondary d-none d-md-table-cell">(( oauth2_uuid ))</td>
+    <td>
+        <form hx-swap="delete"
+                hx-get="/ui/api/admin/oauth2/(( oauth2_uuid ))/remove"
+                hx-confirm="Are you sure you wish to delete the OAuth2 Resource Server &quot;((oauth2_name))&quot;?">
+            <button class="btn btn-tiny btn-danger" id="delete-oauth2-button">Delete</button>
+        </form>
+    </td>
+</tr>
