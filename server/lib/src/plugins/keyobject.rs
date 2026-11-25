@@ -145,7 +145,7 @@ impl KeyObjectManagement {
     ) -> Result<(), OperationError> {
         // New keys will be valid from right meow!
         let valid_from = qs.get_curtime();
-        let txn_cid = qs.get_cid().clone();
+        let txn_cid = *qs.get_cid();
         let key_providers = qs.get_key_providers_mut();
         // ====================================================================
         // Transform any found KeyObjects and manage any related key operations

@@ -25,7 +25,7 @@ impl NameHistory {
                         match post_name {
                             Value::Iname(n) => post.add_ava_if_not_exist(
                                 Attribute::NameHistory,
-                                Value::AuditLogString(cid.clone(), n),
+                                Value::AuditLogString(*cid, n),
                             ),
                             value => {
                                 trace!(?value);
@@ -49,7 +49,7 @@ impl NameHistory {
                     match name {
                         Value::Iname(n) => cand.add_ava_if_not_exist(
                             Attribute::NameHistory,
-                            Value::AuditLogString(cid.clone(), n),
+                            Value::AuditLogString(*cid, n),
                         ),
                         value => {
                             trace!(?value);

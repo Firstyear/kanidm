@@ -49,7 +49,7 @@ impl QueryServerWriteTransaction<'_> {
         // Assign our replication metadata now, since we can proceed with this operation.
         let mut candidates: Vec<Entry<EntryInvalid, EntryNew>> = candidates
             .into_iter()
-            .map(|e| e.assign_cid(self.cid.clone(), &self.schema))
+            .map(|e| e.assign_cid(*self.cid, &self.schema))
             .collect();
 
         // run any pre plugins, giving them the list of mutable candidates.

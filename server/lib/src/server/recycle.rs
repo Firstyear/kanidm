@@ -6,8 +6,8 @@ impl QueryServerWriteTransaction<'_> {
     #[instrument(level = "debug", skip_all)]
     pub fn purge_tombstones(&mut self) -> Result<usize, OperationError> {
         // purge everything that is a tombstone.
-        let trim_cid = self.trim_cid().clone();
-        let anchor_cid = self.get_txn_cid().clone();
+        let trim_cid = *self.trim_cid();
+        let anchor_cid = *self.get_txn_cid();
 
         // Delete them - this is a TRUE delete, no going back now!
         self.be_txn
@@ -43,7 +43,7 @@ impl QueryServerWriteTransaction<'_> {
         let tombstone_cand: Result<Vec<_>, _> = rc
             .iter()
             .map(|e| {
-                e.to_tombstone(self.cid.clone())
+                e.to_tombstone(*self.cid)
                     .validate(&self.schema)
                     .map_err(|e| {
                         admin_error!("Schema Violation in purge_recycled validate: {:?}", e);
@@ -184,11 +184,7 @@ impl QueryServerWriteTransaction<'_> {
         // clone the writeable entries.
         let mut candidates: Vec<Entry<EntryInvalid, EntryCommitted>> = pre_candidates
             .iter()
-            .map(|er| {
-                er.as_ref()
-                    .clone()
-                    .invalidate(self.cid.clone(), &self.trim_cid)
-            })
+            .map(|er| er.as_ref().clone().invalidate(*self.cid, &self.trim_cid))
             // Restore their Refers attribute.
             .map(|mut entry| {
                 if let Some(refers_uuid) = entry.get_ava_single_uuid(Attribute::CascadeDeleted) {
@@ -255,7 +251,7 @@ impl QueryServerWriteTransaction<'_> {
             let tombstone_cand = memorial_candidates
                 .iter()
                 .map(|e| {
-                    e.to_tombstone(self.cid.clone())
+                    e.to_tombstone(*self.cid)
                         .validate(&self.schema)
                         .map_err(|e| {
                             error!("Schema Violation in teardown memorials validation: {:?}", e);

@@ -404,7 +404,7 @@ impl QueryServerWriteTransaction<'_> {
         }
 
         // Preflight checks of the incoming RUV to ensure it's in a good state.
-        let txn_cid = self.get_cid().clone();
+        let txn_cid = *self.get_cid();
         let ruv = self.be_txn.get_ruv_write();
 
         let change_count = ctx_schema_entries.len() + ctx_meta_entries.len() + ctx_entries.len();

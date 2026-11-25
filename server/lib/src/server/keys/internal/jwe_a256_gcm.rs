@@ -81,7 +81,7 @@ impl KeyObjectInternalJweA256GCM {
             InternalJweA256GCM {
                 valid_from,
                 status: InternalJweA256GCMStatus::Valid { cipher },
-                status_cid: cid.clone(),
+                status_cid: *cid,
             },
         );
 
@@ -97,7 +97,7 @@ impl KeyObjectInternalJweA256GCM {
             let usage = KeyUsage::JweA256GCM;
 
             let valid_from = internal_jwe.valid_from;
-            let status_cid = internal_jwe.status_cid.clone();
+            let status_cid = internal_jwe.status_cid;
 
             let (status, der) = match &internal_jwe.status {
                 InternalJweA256GCMStatus::Valid { cipher } => {
@@ -128,7 +128,7 @@ impl KeyObjectInternalJweA256GCM {
     pub fn revoke(&mut self, revoke_key_id: &str, cid: &Cid) -> Result<bool, OperationError> {
         if let Some(key_to_revoke) = self.all.get_mut(revoke_key_id) {
             key_to_revoke.status = InternalJweA256GCMStatus::Revoked;
-            key_to_revoke.status_cid = cid.clone();
+            key_to_revoke.status_cid = *cid;
 
             let valid_from = key_to_revoke.valid_from;
 

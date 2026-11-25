@@ -361,7 +361,7 @@ impl SchemaAttribute {
                 SyntaxType::AttestedPasskey => matches!(v, Value::AttestedPasskey(_, _, _)),
                 SyntaxType::Session => matches!(v, Value::Session(_, _)),
                 SyntaxType::ApiToken => matches!(v, Value::ApiToken(_, _)),
-                SyntaxType::Oauth2Session => matches!(v, Value::Oauth2Session(_, _)),
+                SyntaxType::Oauth2Session => matches!(v, Value::OAuth2Session(_, _)),
                 SyntaxType::JwsKeyEs256 => matches!(v, Value::JwsKeyEs256(_)),
                 SyntaxType::JwsKeyRs256 => matches!(v, Value::JwsKeyRs256(_)),
                 SyntaxType::UiHint => matches!(v, Value::UiHint(_)),

@@ -4,7 +4,7 @@ use time::OffsetDateTime;
 use crate::{be::dbvalue::DbCidV1, prelude::*};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, PartialEq, Clone, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Copy, Clone, Eq, PartialOrd, Ord, Hash)]
 pub struct Cid {
     // Mental note: Derive ord always checks in order of struct fields.
     pub ts: Duration,

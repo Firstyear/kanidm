@@ -43,7 +43,7 @@ use crate::{
     schema::{SchemaAttribute, SchemaClass, SchemaTransaction},
     server::access::AccessEffectivePermission,
     value::{
-        ApiToken, CredentialType, IndexType, IntentTokenState, Oauth2Session, PartialValue,
+        ApiToken, CredentialType, IndexType, IntentTokenState, OAuth2Session, PartialValue,
         Session, SyntaxType, Value,
     },
     valueset::{self, ScimResolveStatus, ValueSet, ValueSetSpn},
@@ -396,9 +396,9 @@ impl Entry<EntryInit, EntryNew> {
 
         // Since the entry is now created, and modified here, we set the initial CID
         // values.
-        let cv = vs_cid![cid.clone()];
+        let cv = vs_cid![cid];
         let _ = self.attrs.insert(Attribute::LastModifiedCid, cv);
-        let cv = vs_cid![cid.clone()];
+        let cv = vs_cid![cid];
         let _ = self.attrs.insert(Attribute::CreatedAtCid, cv);
 
         Entry {
@@ -618,11 +618,11 @@ impl Entry<EntryRefresh, EntryNew> {
         // During seal, these values will be re-written, but we need them present for
         // schema validation.
         let last_mod_cid = ecstate.get_max_cid();
-        let cv = vs_cid![last_mod_cid.clone()];
+        let cv = vs_cid![*last_mod_cid];
         let _ = attrs.insert(Attribute::LastModifiedCid, cv);
 
         let create_at_cid = ecstate.at();
-        let cv = vs_cid![create_at_cid.clone()];
+        let cv = vs_cid![*create_at_cid];
         let _ = attrs.insert(Attribute::CreatedAtCid, cv);
 
         Ok(Entry {
@@ -765,7 +765,7 @@ impl Entry<EntryIncremental, EntryNew> {
 
                         let mut cnf_ent = Entry {
                             valid: EntryInvalid {
-                                cid: cid.clone(),
+                                cid: *cid,
                                 ecstate: db_cs.clone(),
                             },
                             state: EntryNew,
@@ -788,10 +788,10 @@ impl Entry<EntryIncremental, EntryNew> {
                         // Bypass add_ava here so that we don't update the ecstate with the
                         // metadata of these attrs.
                         // Setup the last changed to now.
-                        let cv = vs_cid![cid.clone()];
+                        let cv = vs_cid![*cid];
                         let _ = cnf_ent.attrs.insert(Attribute::LastModifiedCid, cv);
                         // Set the created_at to now, since we are creating a new conflict entry here.
-                        let cv = vs_cid![cid.clone()];
+                        let cv = vs_cid![*cid];
                         let _ = cnf_ent.attrs.insert(Attribute::CreatedAtCid, cv);
 
                         // Now we have to internally bypass some states.
@@ -824,11 +824,11 @@ impl Entry<EntryIncremental, EntryNew> {
                     let ecstate = self_cs.clone();
 
                     let last_mod_cid = ecstate.get_max_cid();
-                    let cv = vs_cid![last_mod_cid.clone()];
+                    let cv = vs_cid![*last_mod_cid];
                     let _ = attrs.insert(Attribute::LastModifiedCid, cv);
 
                     let create_at_cid = ecstate.at();
-                    let cv = vs_cid![create_at_cid.clone()];
+                    let cv = vs_cid![*create_at_cid];
                     let _ = attrs.insert(Attribute::CreatedAtCid, cv);
 
                     (
@@ -909,7 +909,7 @@ impl Entry<EntryIncremental, EntryNew> {
 
                             match (self.attrs.get(attr_name), db_ent.attrs.get(attr_name)) {
                                 (Some(vs_left), Some(vs_right)) if take_left => {
-                                    changes.insert(attr_name.clone(), cid_left.clone());
+                                    changes.insert(attr_name.clone(), *cid_left);
                                     if let Some(merged_attr_state) =
                                         vs_left.repl_merge_valueset(vs_right, trim_cid)
                                     {
@@ -921,7 +921,7 @@ impl Entry<EntryIncremental, EntryNew> {
                                     }
                                 }
                                 (Some(vs_left), Some(vs_right)) => {
-                                    changes.insert(attr_name.clone(), cid_right.clone());
+                                    changes.insert(attr_name.clone(), *cid_right);
                                     if let Some(merged_attr_state) =
                                         vs_right.repl_merge_valueset(vs_left, trim_cid)
                                     {
@@ -933,27 +933,27 @@ impl Entry<EntryIncremental, EntryNew> {
                                     }
                                 }
                                 (Some(vs_left), None) if take_left => {
-                                    changes.insert(attr_name.clone(), cid_left.clone());
+                                    changes.insert(attr_name.clone(), *cid_left);
                                     eattrs.insert(attr_name.clone(), vs_left.clone());
                                 }
                                 (Some(_vs_left), None) => {
-                                    changes.insert(attr_name.clone(), cid_right.clone());
+                                    changes.insert(attr_name.clone(), *cid_right);
                                     // Taking right, nothing to do due to no attr.
                                 }
                                 (None, Some(_vs_right)) if take_left => {
-                                    changes.insert(attr_name.clone(), cid_left.clone());
+                                    changes.insert(attr_name.clone(), *cid_left);
                                     // Taking left, nothing to do due to no attr.
                                 }
                                 (None, Some(vs_right)) => {
-                                    changes.insert(attr_name.clone(), cid_right.clone());
+                                    changes.insert(attr_name.clone(), *cid_right);
                                     eattrs.insert(attr_name.clone(), vs_right.clone());
                                 }
                                 (None, None) if take_left => {
-                                    changes.insert(attr_name.clone(), cid_left.clone());
+                                    changes.insert(attr_name.clone(), *cid_left);
                                     // Taking left, nothing to do due to no attr.
                                 }
                                 (None, None) => {
-                                    changes.insert(attr_name.clone(), cid_right.clone());
+                                    changes.insert(attr_name.clone(), *cid_right);
                                     // Taking right, nothing to do due to no attr.
                                 }
                             }
@@ -961,14 +961,14 @@ impl Entry<EntryIncremental, EntryNew> {
                         }
                         (Some(cid_left), None) => {
                             // Keep the value on the left.
-                            changes.insert(attr_name.clone(), cid_left.clone());
+                            changes.insert(attr_name.clone(), *cid_left);
                             if let Some(valueset) = self.attrs.get(attr_name) {
                                 eattrs.insert(attr_name.clone(), valueset.clone());
                             }
                         }
                         (None, Some(cid_right)) => {
                             // Keep the value on the right.
-                            changes.insert(attr_name.clone(), cid_right.clone());
+                            changes.insert(attr_name.clone(), *cid_right);
                             if let Some(valueset) = db_ent.attrs.get(attr_name) {
                                 eattrs.insert(attr_name.clone(), valueset.clone());
                             }
@@ -981,7 +981,7 @@ impl Entry<EntryIncremental, EntryNew> {
                 }
 
                 let mut ecstate = EntryChangeState::build(State::Live {
-                    at: at_left.clone(),
+                    at: *at_left,
                     changes,
                 });
 
@@ -990,10 +990,10 @@ impl Entry<EntryIncremental, EntryNew> {
                 // the created/mod cid's.
                 ecstate.retain(|k, _| schema.is_replicated(k));
 
-                let cv = vs_cid![ecstate.get_max_cid().clone()];
+                let cv = vs_cid![*ecstate.get_max_cid()];
                 let _ = eattrs.insert(Attribute::LastModifiedCid, cv);
 
-                let cv = vs_cid![ecstate.at().clone()];
+                let cv = vs_cid![*ecstate.at()];
                 let _ = eattrs.insert(Attribute::CreatedAtCid, cv);
 
                 Entry {
@@ -1013,8 +1013,8 @@ impl Entry<EntryIncremental, EntryNew> {
                 // db stub also lacks these attributes too.
                 let mut attrs_new: Eattrs = Map::new();
                 let class_ava = vs_iutf8n![EntryClass::Object.into(), EntryClass::Tombstone.into()];
-                let last_mod_ava = vs_cid![left_at.clone()];
-                let created_ava = vs_cid![left_at.clone()];
+                let last_mod_ava = vs_cid![*left_at];
+                let created_ava = vs_cid![*left_at];
 
                 attrs_new.insert(Attribute::Uuid, vs_uuid![self.valid.uuid]);
                 attrs_new.insert(Attribute::Class, class_ava);
@@ -1064,8 +1064,8 @@ impl Entry<EntryIncremental, EntryNew> {
 
                 let mut attrs_new: Eattrs = Map::new();
                 let class_ava = vs_iutf8n![EntryClass::Object.into(), EntryClass::Tombstone.into()];
-                let last_mod_ava = vs_cid![at.clone()];
-                let created_ava = vs_cid![at.clone()];
+                let last_mod_ava = vs_cid![*at];
+                let created_ava = vs_cid![*at];
 
                 attrs_new.insert(Attribute::Uuid, vs_uuid![db_ent.valid.uuid]);
                 attrs_new.insert(Attribute::Class, class_ava);
@@ -1989,8 +1989,8 @@ impl Entry<EntrySealed, EntryCommitted> {
         let mut attrs_new: Eattrs = Map::new();
 
         let class_ava = vs_iutf8n![EntryClass::Object.into(), EntryClass::Tombstone.into()];
-        let last_mod_ava = vs_cid![cid.clone()];
-        let created_ava = vs_cid![cid.clone()];
+        let last_mod_ava = vs_cid![cid];
+        let created_ava = vs_cid![cid];
 
         attrs_new.insert(Attribute::Uuid, vs_uuid![self.get_uuid()]);
         attrs_new.insert(Attribute::Class, class_ava);
@@ -2288,14 +2288,14 @@ impl<STATE> Entry<EntryValid, STATE> {
 
         // Update the last changed time.
         let last_mod_cid = ecstate.get_max_cid();
-        let cv = vs_cid![last_mod_cid.clone()];
+        let cv = vs_cid![*last_mod_cid];
         let _ = self.attrs.insert(Attribute::LastModifiedCid, cv);
 
         // Update created-at time. This is needed for migrations currently. It could
         // be alternately in the entry create path, but it makes more sense here as
         // we get the create_at time from the replication metadata
         let create_at_cid = ecstate.at();
-        let cv = vs_cid![create_at_cid.clone()];
+        let cv = vs_cid![*create_at_cid];
         let _ = self.attrs.insert(Attribute::CreatedAtCid, cv);
 
         Entry {
@@ -2337,11 +2337,11 @@ where
         // so that if the change only applies to non-replicated attrs we haven't mucked
         // up the value.
         let last_mod_cid = self.valid.ecstate.get_max_cid();
-        let cv = vs_cid![last_mod_cid.clone()];
+        let cv = vs_cid![*last_mod_cid];
         let _ = self.attrs.insert(Attribute::LastModifiedCid, cv);
 
         let create_at_cid = self.valid.ecstate.at();
-        let cv = vs_cid![create_at_cid.clone()];
+        let cv = vs_cid![*create_at_cid];
         let _ = self.attrs.insert(Attribute::CreatedAtCid, cv);
 
         Entry {
@@ -2776,7 +2776,7 @@ impl<VALID, STATE> Entry<VALID, STATE> {
     pub fn get_ava_as_oauth2session_map<A: AsRef<Attribute>>(
         &self,
         attr: A,
-    ) -> Option<&std::collections::BTreeMap<Uuid, Oauth2Session>> {
+    ) -> Option<&std::collections::BTreeMap<Uuid, OAuth2Session>> {
         self.get_ava_set(attr)
             .and_then(|vs| vs.as_oauth2session_map())
     }

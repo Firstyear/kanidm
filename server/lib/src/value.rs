@@ -1306,7 +1306,7 @@ impl From<OauthClaimMapJoin> for DbValueOauthClaimMapJoinV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Oauth2Session {
+pub struct OAuth2Session {
     pub parent: Option<Uuid>,
     pub state: SessionState,
     pub issued_at: OffsetDateTime,
@@ -1409,7 +1409,7 @@ pub enum Value {
 
     Session(Uuid, Session),
     ApiToken(Uuid, ApiToken),
-    Oauth2Session(Uuid, Oauth2Session),
+    OAuth2Session(Uuid, OAuth2Session),
 
     JwsKeyEs256(JwsEs256Signer),
     JwsKeyRs256(JwsRs256Signer),
@@ -2043,7 +2043,7 @@ impl Value {
             Value::Refer(u) | Value::ReferN(u) => Some(*u),
             Value::OauthScopeMap(u, _) => Some(*u),
             // We need to assert that our reference to our rs exists.
-            Value::Oauth2Session(_, m) => Some(m.rs_uuid),
+            Value::OAuth2Session(_, m) => Some(m.rs_uuid),
             _ => None,
         }
     }
@@ -2313,7 +2313,7 @@ impl Value {
             | Value::PrivateBinary(_)
             | Value::JwsKeyEs256(_)
             | Value::Session(_, _)
-            | Value::Oauth2Session(_, _)
+            | Value::OAuth2Session(_, _)
             | Value::JwsKeyRs256(_)
             | Value::UiHint(_)
             | Value::CredentialType(_)

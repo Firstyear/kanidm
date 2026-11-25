@@ -190,7 +190,7 @@ mod tests {
 
     use crate::{
         event::CreateEvent,
-        value::{AuthType, Oauth2Session, Session, SessionState},
+        value::{AuthType, OAuth2Session, Session, SessionState},
     };
     use kanidm_proto::constants::OAUTH2_SCOPE_OPENID;
     use std::time::Duration;
@@ -395,9 +395,9 @@ mod tests {
         let modlist = modlist!([
             Modify::Present(
                 "oauth2_session".into(),
-                Value::Oauth2Session(
+                Value::OAuth2Session(
                     session_id,
-                    Oauth2Session {
+                    OAuth2Session {
                         parent: Some(parent_id),
                         // Set to the exp window.
                         state,
@@ -570,9 +570,9 @@ mod tests {
         let modlist = modlist!([
             Modify::Present(
                 "oauth2_session".into(),
-                Value::Oauth2Session(
+                Value::OAuth2Session(
                     session_id,
-                    Oauth2Session {
+                    OAuth2Session {
                         parent: Some(parent_id),
                         // Note we set the exp to None so we are not removing based on exp
                         state: SessionState::NeverExpires,
@@ -731,9 +731,9 @@ mod tests {
         let parent = Uuid::new_v4();
         let issued_at = curtime_odt;
 
-        let session = Value::Oauth2Session(
+        let session = Value::OAuth2Session(
             session_id,
-            Oauth2Session {
+            OAuth2Session {
                 parent: Some(parent),
                 // Note we set the exp to None so we are asserting the removal is due to the lack
                 // of the parent session.

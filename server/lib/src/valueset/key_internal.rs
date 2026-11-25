@@ -206,7 +206,7 @@ impl ValueSetT for ValueSetKeyInternal {
     fn purge(&mut self, cid: &Cid) -> bool {
         for key_object in self.map.values_mut() {
             if !matches!(key_object.status, KeyStatus::Revoked) {
-                key_object.status_cid = cid.clone();
+                key_object.status_cid = *cid;
                 key_object.status = KeyStatus::Revoked;
             }
         }
@@ -335,7 +335,7 @@ impl ValueSetT for ValueSetKeyInternal {
                     id: id.clone(),
                     usage: *usage,
                     status: *status,
-                    status_cid: status_cid.clone(),
+                    status_cid: *status_cid,
                     der: der.clone(),
                     valid_from: *valid_from,
                 }

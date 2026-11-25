@@ -242,7 +242,7 @@ impl QueryServerReadTransaction<'_> {
         // When a server is "trimmed" from the RUV, it no longer influences the overlap decision
         // because the other servers will have continued to advance.
 
-        let trim_cid = self.trim_cid().clone();
+        let trim_cid = *self.trim_cid();
 
         let supplier_ruv = self.get_be_txn().get_ruv();
 
@@ -389,7 +389,7 @@ impl QueryServerReadTransaction<'_> {
         let domain_devel = self.d_info.d_devel_taint;
         let domain_uuid = self.d_info.d_uuid;
 
-        let trim_cid = self.trim_cid().clone();
+        let trim_cid = *self.trim_cid();
 
         // What is the set of data we are providing?
         let ranges = self

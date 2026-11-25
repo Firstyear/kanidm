@@ -83,11 +83,7 @@ impl QueryServerWriteTransaction<'_> {
             pre_cascade_delete_candidates
                 .iter()
                 // Invalidate and assign change id's
-                .map(|er| {
-                    er.as_ref()
-                        .clone()
-                        .invalidate(self.cid.clone(), &self.trim_cid)
-                })
+                .map(|er| er.as_ref().clone().invalidate(*self.cid, &self.trim_cid))
                 // These entries are the ones that are being deleted by cascade, so we mark them
                 // as such.
                 .map(|mut entry| {
@@ -104,11 +100,7 @@ impl QueryServerWriteTransaction<'_> {
         let mut candidates: Vec<Entry<EntryInvalid, EntryCommitted>> = pre_candidates
             .iter()
             // Invalidate and assign change id's
-            .map(|er| {
-                er.as_ref()
-                    .clone()
-                    .invalidate(self.cid.clone(), &self.trim_cid)
-            })
+            .map(|er| er.as_ref().clone().invalidate(*self.cid, &self.trim_cid))
             .collect();
 
         pre_candidates.append(&mut pre_cascade_delete_candidates);
@@ -139,7 +131,7 @@ impl QueryServerWriteTransaction<'_> {
                     );
                     // Now setup replication metadata so that we can put this entry
                     // into the invalid state.
-                    entry.assign_cid(self.cid.clone(), &self.schema)
+                    entry.assign_cid(*self.cid, &self.schema)
                 })
                 .collect();
 

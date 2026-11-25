@@ -127,23 +127,18 @@ impl ValueSetT for ValueSetAuditLogString {
     }
 
     fn to_db_valueset_v2(&self) -> DbValueSetV2 {
-        DbValueSetV2::AuditLogString(
-            self.map
-                .iter()
-                .map(|(c, s)| (c.clone(), s.clone()))
-                .collect(),
-        )
+        DbValueSetV2::AuditLogString(self.map.iter().map(|(c, s)| (*c, s.clone())).collect())
     }
 
     fn to_partialvalue_iter(&self) -> Box<dyn Iterator<Item = PartialValue> + '_> {
-        Box::new(self.map.keys().map(|c| PartialValue::Cid(c.clone())))
+        Box::new(self.map.keys().map(|c| PartialValue::Cid(*c)))
     }
 
     fn to_value_iter(&self) -> Box<dyn Iterator<Item = Value> + '_> {
         Box::new(
             self.map
                 .iter()
-                .map(|(c, s)| Value::AuditLogString(c.clone(), s.clone())),
+                .map(|(c, s)| Value::AuditLogString(*c, s.clone())),
         )
     }
 

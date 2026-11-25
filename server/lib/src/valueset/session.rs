@@ -8,7 +8,7 @@ use crate::{
     repl::cid::Cid,
     schema::SchemaAttribute,
     value::{
-        ApiToken, ApiTokenScope, AuthType, Oauth2Session, Session, SessionExtMetadata,
+        ApiToken, ApiTokenScope, AuthType, OAuth2Session, Session, SessionExtMetadata,
         SessionScope, SessionState,
     },
     valueset::{uuid_to_proto_string, DbValueSetV2, ScimResolveStatus, ValueSet},
@@ -258,7 +258,7 @@ impl ValueSetT for ValueSetSession {
         if let PartialValue::Refer(u) = pv {
             if let Some(session) = self.map.get_mut(u) {
                 if !matches!(session.state, SessionState::RevokedAt(_)) {
-                    session.state = SessionState::RevokedAt(cid.clone());
+                    session.state = SessionState::RevokedAt(*cid);
                 }
             }
         }
@@ -269,7 +269,7 @@ impl ValueSetT for ValueSetSession {
         for session in self.map.values_mut() {
             // Send them all to the shadow realm
             if !matches!(session.state, SessionState::RevokedAt(_)) {
-                session.state = SessionState::RevokedAt(cid.clone())
+                session.state = SessionState::RevokedAt(*cid)
             }
         }
         // Can't be purged since we need the cid's of revoked to persist.
@@ -492,7 +492,7 @@ impl ValueSetT for ValueSetSession {
 
 #[derive(Debug, Clone)]
 pub struct ValueSetOauth2Session {
-    map: BTreeMap<Uuid, Oauth2Session>,
+    map: BTreeMap<Uuid, OAuth2Session>,
     // this is a "filter" to tell us if as rs_id is used anywhere
     // in this set. The reason is so that we don't do O(n) searches
     // on a refer if it's not in this set. The alternate approach is
@@ -502,14 +502,14 @@ pub struct ValueSetOauth2Session {
 }
 
 impl ValueSetOauth2Session {
-    pub fn new(u: Uuid, m: Oauth2Session) -> Box<Self> {
+    pub fn new(u: Uuid, m: OAuth2Session) -> Box<Self> {
         let mut map = BTreeMap::new();
         let rs_filter = m.rs_uuid.as_u128();
         map.insert(u, m);
         Box::new(ValueSetOauth2Session { map, rs_filter })
     }
 
-    pub fn push(&mut self, u: Uuid, m: Oauth2Session) -> bool {
+    pub fn push(&mut self, u: Uuid, m: OAuth2Session) -> bool {
         self.rs_filter |= m.rs_uuid.as_u128();
         self.map.insert(u, m).is_none()
     }
@@ -572,7 +572,7 @@ impl ValueSetOauth2Session {
                         rs_filter |= rs_uuid.as_u128();
                         Some((
                             refer,
-                            Oauth2Session {
+                            OAuth2Session {
                                 parent,
                                 state,
                                 issued_at,
@@ -626,7 +626,7 @@ impl ValueSetOauth2Session {
 
                         Some((
                             refer,
-                            Oauth2Session {
+                            OAuth2Session {
                                 parent,
                                 state,
                                 issued_at,
@@ -678,7 +678,7 @@ impl ValueSetOauth2Session {
 
                         Some((
                             refer,
-                            Oauth2Session {
+                            OAuth2Session {
                                 parent,
                                 state,
                                 issued_at,
@@ -697,7 +697,7 @@ impl ValueSetOauth2Session {
     #[allow(clippy::should_implement_trait)]
     pub fn from_iter<T>(iter: T) -> Option<Box<Self>>
     where
-        T: IntoIterator<Item = (Uuid, Oauth2Session)>,
+        T: IntoIterator<Item = (Uuid, OAuth2Session)>,
     {
         let mut rs_filter = u128::MIN;
         let map = iter
@@ -714,7 +714,7 @@ impl ValueSetOauth2Session {
 impl ValueSetT for ValueSetOauth2Session {
     fn insert_checked(&mut self, value: Value) -> Result<bool, OperationError> {
         match value {
-            Value::Oauth2Session(u, m) => {
+            Value::OAuth2Session(u, m) => {
                 // Unlike other types, this allows overwriting as oauth2 sessions
                 // can be *extended* in time length.
                 match self.map.entry(u) {
@@ -749,7 +749,7 @@ impl ValueSetT for ValueSetOauth2Session {
         if let PartialValue::Refer(u) = pv {
             if let Some(session) = self.map.get_mut(u) {
                 if !matches!(session.state, SessionState::RevokedAt(_)) {
-                    session.state = SessionState::RevokedAt(cid.clone());
+                    session.state = SessionState::RevokedAt(*cid);
                 }
             } else {
                 // What if it's an rs_uuid?
@@ -760,7 +760,7 @@ impl ValueSetT for ValueSetOauth2Session {
                     let mut removed = false;
                     self.map.values_mut().for_each(|session| {
                         if session.rs_uuid == *u {
-                            session.state = SessionState::RevokedAt(cid.clone());
+                            session.state = SessionState::RevokedAt(*cid);
                             removed = true;
                         }
                     });
@@ -774,7 +774,7 @@ impl ValueSetT for ValueSetOauth2Session {
         for session in self.map.values_mut() {
             // Send them all to the shadow realm
             if !matches!(session.state, SessionState::RevokedAt(_)) {
-                session.state = SessionState::RevokedAt(cid.clone())
+                session.state = SessionState::RevokedAt(*cid)
             }
         }
         // Can't be purged since we need the cid's of revoked to persist.
@@ -936,7 +936,7 @@ impl ValueSetT for ValueSetOauth2Session {
         Box::new(
             self.map
                 .iter()
-                .map(|(u, m)| Value::Oauth2Session(*u, m.clone())),
+                .map(|(u, m)| Value::OAuth2Session(*u, m.clone())),
         )
     }
 
@@ -976,7 +976,7 @@ impl ValueSetT for ValueSetOauth2Session {
         }
     }
 
-    fn as_oauth2session_map(&self) -> Option<&BTreeMap<Uuid, Oauth2Session>> {
+    fn as_oauth2session_map(&self) -> Option<&BTreeMap<Uuid, OAuth2Session>> {
         Some(&self.map)
     }
 
@@ -1302,7 +1302,7 @@ mod tests {
     use crate::{
         prelude::{IdentityId, SessionScope, Uuid, ValueSet, UUID_SYSTEM},
         repl::cid::Cid,
-        value::{AuthType, Oauth2Session, Session, SessionState},
+        value::{AuthType, OAuth2Session, Session, SessionState},
     };
     use time::OffsetDateTime;
 
@@ -1686,7 +1686,7 @@ mod tests {
         let s_uuid = Uuid::new_v4();
         let mut vs: ValueSet = ValueSetOauth2Session::new(
             s_uuid,
-            Oauth2Session {
+            OAuth2Session {
                 state: SessionState::NeverExpires,
                 #[allow(clippy::disallowed_methods)]
                 issued_at: OffsetDateTime::now_utc(),
@@ -1718,7 +1718,7 @@ mod tests {
 
         let mut vs_a: ValueSet = ValueSetOauth2Session::new(
             s_uuid,
-            Oauth2Session {
+            OAuth2Session {
                 state: SessionState::NeverExpires,
                 #[allow(clippy::disallowed_methods)]
                 issued_at: OffsetDateTime::now_utc(),
@@ -1729,7 +1729,7 @@ mod tests {
 
         let vs_b: ValueSet = ValueSetOauth2Session::new(
             s_uuid,
-            Oauth2Session {
+            OAuth2Session {
                 state: SessionState::RevokedAt(zero_cid.clone()),
                 #[allow(clippy::disallowed_methods)]
                 issued_at: OffsetDateTime::now_utc(),
@@ -1755,7 +1755,7 @@ mod tests {
 
         let vs_a: ValueSet = ValueSetOauth2Session::new(
             s_uuid,
-            Oauth2Session {
+            OAuth2Session {
                 state: SessionState::NeverExpires,
                 #[allow(clippy::disallowed_methods)]
                 issued_at: OffsetDateTime::now_utc(),
@@ -1766,7 +1766,7 @@ mod tests {
 
         let mut vs_b: ValueSet = ValueSetOauth2Session::new(
             s_uuid,
-            Oauth2Session {
+            OAuth2Session {
                 state: SessionState::RevokedAt(zero_cid.clone()),
                 #[allow(clippy::disallowed_methods)]
                 issued_at: OffsetDateTime::now_utc(),
@@ -1795,7 +1795,7 @@ mod tests {
 
         let vs_a: ValueSet = ValueSetOauth2Session::new(
             s_uuid,
-            Oauth2Session {
+            OAuth2Session {
                 state: SessionState::NeverExpires,
                 #[allow(clippy::disallowed_methods)]
                 issued_at: OffsetDateTime::now_utc(),
@@ -1807,7 +1807,7 @@ mod tests {
         let vs_b: ValueSet = ValueSetOauth2Session::from_iter([
             (
                 s_uuid,
-                Oauth2Session {
+                OAuth2Session {
                     state: SessionState::RevokedAt(one_cid.clone()),
                     #[allow(clippy::disallowed_methods)]
                     issued_at: OffsetDateTime::now_utc(),
@@ -1817,7 +1817,7 @@ mod tests {
             ),
             (
                 r_uuid,
-                Oauth2Session {
+                OAuth2Session {
                     state: SessionState::RevokedAt(zero_cid.clone()),
                     #[allow(clippy::disallowed_methods)]
                     issued_at: OffsetDateTime::now_utc(),
@@ -1852,7 +1852,7 @@ mod tests {
 
         let vs_a: ValueSet = ValueSetOauth2Session::new(
             s_uuid,
-            Oauth2Session {
+            OAuth2Session {
                 state: SessionState::NeverExpires,
                 #[allow(clippy::disallowed_methods)]
                 issued_at: OffsetDateTime::now_utc(),
@@ -1864,7 +1864,7 @@ mod tests {
         let vs_b: ValueSet = ValueSetOauth2Session::from_iter([
             (
                 s_uuid,
-                Oauth2Session {
+                OAuth2Session {
                     state: SessionState::RevokedAt(one_cid.clone()),
                     #[allow(clippy::disallowed_methods)]
                     issued_at: OffsetDateTime::now_utc(),
@@ -1874,7 +1874,7 @@ mod tests {
             ),
             (
                 r_uuid,
-                Oauth2Session {
+                OAuth2Session {
                     state: SessionState::RevokedAt(zero_cid.clone()),
                     #[allow(clippy::disallowed_methods)]
                     issued_at: OffsetDateTime::now_utc(),
@@ -1913,7 +1913,7 @@ mod tests {
         let mut vs_a: ValueSet = ValueSetOauth2Session::from_iter([
             (
                 zero_uuid,
-                Oauth2Session {
+                OAuth2Session {
                     state: SessionState::RevokedAt(zero_cid),
                     #[allow(clippy::disallowed_methods)]
                     issued_at: OffsetDateTime::now_utc(),
@@ -1924,7 +1924,7 @@ mod tests {
             (
                 one_uuid,
                 #[allow(clippy::disallowed_methods)]
-                Oauth2Session {
+                OAuth2Session {
                     state: SessionState::RevokedAt(one_cid),
                     issued_at: OffsetDateTime::now_utc(),
                     parent: Some(Uuid::new_v4()),
@@ -1933,7 +1933,7 @@ mod tests {
             ),
             (
                 two_uuid,
-                Oauth2Session {
+                OAuth2Session {
                     state: SessionState::RevokedAt(two_cid.clone()),
                     #[allow(clippy::disallowed_methods)]
                     issued_at: OffsetDateTime::now_utc(),
@@ -1994,7 +1994,7 @@ mod tests {
 
         let vs: ValueSet = ValueSetOauth2Session::new(
             s_uuid,
-            Oauth2Session {
+            OAuth2Session {
                 state: SessionState::NeverExpires,
                 issued_at: OffsetDateTime::UNIX_EPOCH,
                 parent: Some(s_uuid),

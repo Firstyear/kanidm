@@ -6,7 +6,7 @@ use crate::{
     schema::SchemaAttribute,
     server::keys::KeyId,
     value::{
-        Address, ApiToken, CredentialType, IntentTokenState, Oauth2Session, OauthClaimMapJoin,
+        Address, ApiToken, CredentialType, IntentTokenState, OAuth2Session, OauthClaimMapJoin,
         Session,
     },
 };
@@ -616,7 +616,7 @@ pub trait ValueSetT: std::fmt::Debug + DynClone {
         None
     }
 
-    fn as_oauth2session_map(&self) -> Option<&BTreeMap<Uuid, Oauth2Session>> {
+    fn as_oauth2session_map(&self) -> Option<&BTreeMap<Uuid, OAuth2Session>> {
         debug_assert!(false);
         None
     }
@@ -916,7 +916,7 @@ pub fn from_result_value_iter(
         | Value::TotpSecret(_, _)
         | Value::Session(_, _)
         | Value::ApiToken(_, _)
-        | Value::Oauth2Session(_, _)
+        | Value::OAuth2Session(_, _)
         | Value::OauthClaimMap(_, _)
         | Value::OauthClaimValue(_, _, _)
         | Value::JwsKeyEs256(_)
@@ -982,7 +982,7 @@ pub fn from_value_iter(mut iter: impl Iterator<Item = Value>) -> Result<ValueSet
         Value::JwsKeyRs256(k) => ValueSetJwsKeyRs256::new(k),
         Value::Session(u, m) => ValueSetSession::new(u, m),
         Value::ApiToken(u, m) => ValueSetApiTokenSet::new(u, m),
-        Value::Oauth2Session(u, m) => ValueSetOauth2Session::new(u, m),
+        Value::OAuth2Session(u, m) => ValueSetOauth2Session::new(u, m),
         Value::UiHint(u) => ValueSetUiHint::new(u),
         Value::TotpSecret(l, t) => ValueSetTotpSecret::new(l, t),
         Value::AuditLogString(c, s) => ValueSetAuditLogString::new((c, s)),

@@ -130,73 +130,37 @@ impl KeyProviderInternal {
                         let jws_es256_ref =
                             jws_es256.get_or_insert_with(KeyObjectInternalJwtEs256::default);
 
-                        jws_es256_ref.load(
-                            key_id,
-                            *status,
-                            status_cid.clone(),
-                            der,
-                            *valid_from,
-                        )?;
+                        jws_es256_ref.load(key_id, *status, *status_cid, der, *valid_from)?;
                     }
                     KeyUsage::JwsHs256 => {
                         let jws_hs256_ref =
                             jws_hs256.get_or_insert_with(KeyObjectInternalJwtHs256::default);
 
-                        jws_hs256_ref.load(
-                            key_id,
-                            *status,
-                            status_cid.clone(),
-                            der,
-                            *valid_from,
-                        )?;
+                        jws_hs256_ref.load(key_id, *status, *status_cid, der, *valid_from)?;
                     }
                     KeyUsage::JwsRs256 => {
                         let jws_rs256_ref =
                             jws_rs256.get_or_insert_with(KeyObjectInternalJwtRs256::default);
 
-                        jws_rs256_ref.load(
-                            key_id,
-                            *status,
-                            status_cid.clone(),
-                            der,
-                            *valid_from,
-                        )?;
+                        jws_rs256_ref.load(key_id, *status, *status_cid, der, *valid_from)?;
                     }
                     KeyUsage::JweA128GCM => {
                         let jwe_a128gcm_ref =
                             jwe_a128gcm.get_or_insert_with(KeyObjectInternalJweA128GCM::default);
 
-                        jwe_a128gcm_ref.load(
-                            key_id,
-                            *status,
-                            status_cid.clone(),
-                            der,
-                            *valid_from,
-                        )?;
+                        jwe_a128gcm_ref.load(key_id, *status, *status_cid, der, *valid_from)?;
                     }
                     KeyUsage::JweA256GCM => {
                         let jwe_a256gcm_ref =
                             jwe_a256gcm.get_or_insert_with(KeyObjectInternalJweA256GCM::default);
 
-                        jwe_a256gcm_ref.load(
-                            key_id,
-                            *status,
-                            status_cid.clone(),
-                            der,
-                            *valid_from,
-                        )?;
+                        jwe_a256gcm_ref.load(key_id, *status, *status_cid, der, *valid_from)?;
                     }
                     KeyUsage::HkdfS256 => {
                         let hkdf_s256_ref =
                             hkdf_s256.get_or_insert_with(KeyObjectInternalHkdfS256::default);
 
-                        hkdf_s256_ref.load(
-                            key_id,
-                            *status,
-                            status_cid.clone(),
-                            der,
-                            *valid_from,
-                        )?;
+                        hkdf_s256_ref.load(key_id, *status, *status_cid, der, *valid_from)?;
                     }
                 }
             }
@@ -329,7 +293,7 @@ impl KeyObjectInternalJwtEs256 {
                         verifier,
                         private_der: private_der.clone().into(),
                     },
-                    status_cid: cid.clone(),
+                    status_cid: *cid,
                 },
             );
         }
@@ -373,7 +337,7 @@ impl KeyObjectInternalJwtEs256 {
                     verifier,
                     private_der,
                 },
-                status_cid: cid.clone(),
+                status_cid: *cid,
             },
         );
 
@@ -402,7 +366,7 @@ impl KeyObjectInternalJwtEs256 {
                 untrusted_verifier,
                 public_der,
             };
-            key_to_revoke.status_cid = cid.clone();
+            key_to_revoke.status_cid = *cid;
 
             let valid_from = key_to_revoke.valid_from;
 
@@ -491,7 +455,7 @@ impl KeyObjectInternalJwtEs256 {
             let usage = KeyUsage::JwsEs256;
 
             let valid_from = internal_jwt.valid_from;
-            let status_cid = internal_jwt.status_cid.clone();
+            let status_cid = internal_jwt.status_cid;
 
             let (status, der) = match &internal_jwt.status {
                 InternalJwtEs256Status::Valid { private_der, .. } => {
@@ -719,7 +683,7 @@ impl KeyObjectInternalJwtRs256 {
                         verifier,
                         private_der: private_der.clone().into(),
                     },
-                    status_cid: cid.clone(),
+                    status_cid: *cid,
                 },
             );
         }
@@ -763,7 +727,7 @@ impl KeyObjectInternalJwtRs256 {
                     verifier,
                     private_der,
                 },
-                status_cid: cid.clone(),
+                status_cid: *cid,
             },
         );
 
@@ -792,7 +756,7 @@ impl KeyObjectInternalJwtRs256 {
                 untrusted_verifier,
                 public_der,
             };
-            key_to_revoke.status_cid = cid.clone();
+            key_to_revoke.status_cid = *cid;
 
             let valid_from = key_to_revoke.valid_from;
 
@@ -881,7 +845,7 @@ impl KeyObjectInternalJwtRs256 {
             let usage = KeyUsage::JwsRs256;
 
             let valid_from = internal_jwt.valid_from;
-            let status_cid = internal_jwt.status_cid.clone();
+            let status_cid = internal_jwt.status_cid;
 
             let (status, der) = match &internal_jwt.status {
                 InternalJwtRs256Status::Valid { private_der, .. } => {
@@ -1551,7 +1515,7 @@ impl KeyObjectInternalJwtHs256 {
                 InternalJwtHs256 {
                     valid_from,
                     status: InternalJwtHs256Status::Valid { verifier },
-                    status_cid: cid.clone(),
+                    status_cid: *cid,
                 },
             );
         }
@@ -1581,7 +1545,7 @@ impl KeyObjectInternalJwtHs256 {
             InternalJwtHs256 {
                 valid_from,
                 status: InternalJwtHs256Status::Valid { verifier },
-                status_cid: cid.clone(),
+                status_cid: *cid,
             },
         );
 
@@ -1594,7 +1558,7 @@ impl KeyObjectInternalJwtHs256 {
                 return Ok(false);
             }
 
-            key_to_revoke.status_cid = cid.clone();
+            key_to_revoke.status_cid = *cid;
             key_to_revoke.status = InternalJwtHs256Status::Revoked;
 
             let valid_from = key_to_revoke.valid_from;
@@ -1660,7 +1624,7 @@ impl KeyObjectInternalJwtHs256 {
             let usage = KeyUsage::JwsHs256;
 
             let valid_from = internal_jwt.valid_from;
-            let status_cid = internal_jwt.status_cid.clone();
+            let status_cid = internal_jwt.status_cid;
 
             let (status, der) = match &internal_jwt.status {
                 InternalJwtHs256Status::Valid { verifier } => (
@@ -1835,7 +1799,7 @@ impl KeyObjectInternalHkdfS256 {
             InternalHkdfS256 {
                 valid_from,
                 status: InternalHkdfS256Status::Valid { verifier },
-                status_cid: cid.clone(),
+                status_cid: *cid,
             },
         );
 
@@ -1848,7 +1812,7 @@ impl KeyObjectInternalHkdfS256 {
                 return Ok(false);
             }
 
-            key_to_revoke.status_cid = cid.clone();
+            key_to_revoke.status_cid = *cid;
             key_to_revoke.status = InternalHkdfS256Status::Revoked;
 
             let valid_from = key_to_revoke.valid_from;
@@ -1911,7 +1875,7 @@ impl KeyObjectInternalHkdfS256 {
             let usage = KeyUsage::HkdfS256;
 
             let valid_from = internal_jwt.valid_from;
-            let status_cid = internal_jwt.status_cid.clone();
+            let status_cid = internal_jwt.status_cid;
 
             let (status, der) = match &internal_jwt.status {
                 InternalHkdfS256Status::Valid { verifier } => {

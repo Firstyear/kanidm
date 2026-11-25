@@ -15,7 +15,7 @@ use crate::{
     prelude::*,
     server::keys::{KeyId, KeyObject, KeyProvidersTransaction, KeyProvidersWriteTransaction},
     utils,
-    value::{Oauth2Session, OauthClaimMapJoin, SessionState, OAUTHSCOPE_RE},
+    value::{OAuth2Session, OauthClaimMapJoin, SessionState, OAUTHSCOPE_RE},
 };
 use base64::{engine::general_purpose, Engine as _};
 pub use compact_jwt::{compact::JwkKeySet, OidcToken};
@@ -1971,9 +1971,9 @@ impl IdmServerProxyWriteTransaction<'_> {
         };
 
         // Write the session to the db
-        let session = Value::Oauth2Session(
+        let session = Value::OAuth2Session(
             session_id,
-            Oauth2Session {
+            OAuth2Session {
                 parent: None,
                 state: SessionState::ExpiresAt(odt_exp),
                 issued_at: odt_ct,
@@ -2196,9 +2196,9 @@ impl IdmServerProxyWriteTransaction<'_> {
 
         // Write the session to the db even with the refresh path, we need to do
         // this to update the "not issued before" time.
-        let session = Value::Oauth2Session(
+        let session = Value::OAuth2Session(
             session_id,
-            Oauth2Session {
+            OAuth2Session {
                 parent: parent_session_id,
                 state: SessionState::ExpiresAt(odt_refresh_expiry),
                 issued_at: odt_ct,

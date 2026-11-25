@@ -26,16 +26,9 @@ pub struct EntryChangeState {
 
 impl EntryChangeState {
     pub fn new(cid: &Cid, attrs: &Eattrs, _schema: &dyn SchemaTransaction) -> Self {
-        let changes = attrs
-            .keys()
-            .cloned()
-            .map(|attr| (attr, cid.clone()))
-            .collect();
+        let changes = attrs.keys().cloned().map(|attr| (attr, *cid)).collect();
 
-        let st = State::Live {
-            at: cid.clone(),
-            changes,
-        };
+        let st = State::Live { at: *cid, changes };
 
         EntryChangeState { st }
     }
@@ -47,18 +40,11 @@ impl EntryChangeState {
             .map(|c| c.contains(&EntryClass::Tombstone.to_partialvalue()))
             .unwrap_or(false)
         {
-            State::Tombstone { at: cid.clone() }
+            State::Tombstone { at: *cid }
         } else {
-            let changes = attrs
-                .keys()
-                .cloned()
-                .map(|attr| (attr, cid.clone()))
-                .collect();
+            let changes = attrs.keys().cloned().map(|attr| (attr, *cid)).collect();
 
-            State::Live {
-                at: cid.clone(),
-                changes,
-            }
+            State::Live { at: *cid, changes }
         };
 
         EntryChangeState { st }
@@ -152,10 +138,10 @@ impl EntryChangeState {
     pub(crate) fn stub(&self) -> Self {
         let st = match &self.st {
             State::Live { at, changes: _ } => State::Live {
-                at: at.clone(),
+                at: *at,
                 changes: Default::default(),
             },
-            State::Tombstone { at } => State::Tombstone { at: at.clone() },
+            State::Tombstone { at } => State::Tombstone { at: *at },
         };
         EntryChangeState { st }
     }
@@ -169,10 +155,10 @@ impl EntryChangeState {
                 if let Some(change) = changes.get_mut(attr) {
                     // Update the cid.
                     if change != cid {
-                        *change = cid.clone()
+                        *change = *cid
                     }
                 } else {
-                    changes.insert(attr.clone(), cid.clone());
+                    changes.insert(attr.clone(), *cid);
                 }
             }
             State::Tombstone { .. } => {
@@ -183,7 +169,7 @@ impl EntryChangeState {
 
     pub fn tombstone(&mut self, cid: &Cid) {
         match &mut self.st {
-            State::Live { at: _, changes: _ } => self.st = State::Tombstone { at: cid.clone() },
+            State::Live { at: _, changes: _ } => self.st = State::Tombstone { at: *cid },
             State::Tombstone { .. } => {} // no-op
         };
     }

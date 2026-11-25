@@ -600,7 +600,7 @@ mod tests {
         credential::Credential,
         event::CreateEvent,
         prelude::*,
-        value::{AuthType, Oauth2Session, OauthClaimMapJoin, Session, SessionState},
+        value::{AuthType, OAuth2Session, OauthClaimMapJoin, Session, SessionState},
     };
     use crypto_glue::{traits::DecodePem, x509::Certificate};
     use kanidm_lib_crypto::CryptoPolicy;
@@ -1184,9 +1184,9 @@ mod tests {
         let modlist = modlist!([
             Modify::Present(
                 Attribute::OAuth2Session,
-                Value::Oauth2Session(
+                Value::OAuth2Session(
                     session_id,
-                    Oauth2Session {
+                    OAuth2Session {
                         parent: Some(parent_id),
                         // Note we set the exp to None so we are not removing based on exp
                         state: SessionState::NeverExpires,
