@@ -32,7 +32,6 @@ chrono = { workspace = true }
 compact_jwt = { workspace = true }
 cron = { workspace = true }
 crypto-glue = { workspace = true }
-filetime = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 haproxy-protocol = { workspace = true, features = ["tokio"] }
