@@ -2014,6 +2014,7 @@ pub static IDM_ACP_MESSAGE_MANAGE: LazyLock<BuiltinAcp> = LazyLock::new(|| Built
         Attribute::SendAfter,
         Attribute::DeleteAfter,
         Attribute::MailDestination,
+        Attribute::Uuid,
     ],
     create_classes: vec![EntryClass::Object, EntryClass::OutboundMessage],
     ..Default::default()
