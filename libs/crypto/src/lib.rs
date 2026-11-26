@@ -683,17 +683,10 @@ fn parse_argon(hash_value: &str) -> Result<Password, PasswordError> {
                 PasswordError::ParsingFailed
             })?;
 
-            let salt = salt
-                .and_then(|s| {
-                    let mut salt_arr = [0u8; 64];
-                    s.decode_b64(&mut salt_arr)
-                        .ok()
-                        .map(|salt_bytes| salt_bytes.to_owned())
-                })
-                .ok_or_else(|| {
-                    error!("Failed to access salt");
-                    PasswordError::ParsingFailed
-                })?;
+            let salt = salt.map(|s| s.to_vec()).ok_or_else(|| {
+                error!("Failed to access salt");
+                PasswordError::ParsingFailed
+            })?;
 
             let key = hash.map(|h| h.as_bytes().into()).ok_or_else(|| {
                 error!("Failed to access key");
@@ -1437,12 +1430,6 @@ mod tests {
         assert!(!r.requires_upgrade());
         assert!(r.verify(password).unwrap_or(false));
     }
-
-    /*
-     * wbrown - 20221104 - I tried to programmatically enable the legacy provider, but
-     * it consistently "did nothing at all", meaning we have to rely on users to enable
-     * this for this test.
-     */
 
     #[test]
     fn test_password_from_ipa_nt_hash() {
