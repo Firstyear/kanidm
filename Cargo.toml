@@ -1,5 +1,5 @@
 [workspace.package]
-version = "1.12.1"
+version = "1.12.2"
 authors = [
     "William Brown <william@blackhats.net.au>",
     "James Hodgkinson <james@terminaloutcomes.com>",
@@ -134,23 +134,23 @@ codegen-units = 256
 # sshkey-attest = { path = "../webauthn-rs/sshkey-attest" }
 
 [workspace.dependencies]
-kanidmd_core = { path = "./server/core", version = "=1.12.1" }
-kanidmd_lib = { path = "./server/lib", version = "=1.12.1" }
-kanidmd_lib_macros = { path = "./server/lib-macros", version = "=1.12.1" }
-kanidmd_testkit = { path = "./server/testkit", version = "=1.12.1" }
-kanidm_build_profiles = { path = "./libs/profiles", version = "=1.12.1" }
-kanidm_client = { path = "./libs/client", version = "=1.12.1" }
-kanidm_lib_crypto = { path = "./libs/crypto", version = "=1.12.1" }
-kanidm_lib_file_permissions = { path = "./libs/file_permissions", version = "=1.12.1" }
-kanidm_proto = { path = "./proto", version = "=1.12.1" }
-kanidm_utils_users = { path = "./libs/users", version = "=1.12.1" }
-nss_sparkle_common = { path = "./unix_integration/nss_sparkle_common", version = "=1.12.1" }
-pam_sparkle_common = { path = "./unix_integration/pam_sparkle_common", version = "=1.12.1" }
-rlm_kanidm_shared = { path = "./rlm_kanidm/shared", version = "=1.12.1" }
-sparkle_unix_common = { path = "./unix_integration/common", version = "=1.12.1" }
-sparkle_resolver_common = { path = "./unix_integration/resolver_common", version = "=1.12.1" }
-scim_proto = { path = "./libs/scim_proto", version = "=1.12.1" }
-sketching = { path = "./libs/sketching", version = "=1.12.1" }
+kanidmd_core = { path = "./server/core", version = "=1.12.2" }
+kanidmd_lib = { path = "./server/lib", version = "=1.12.2" }
+kanidmd_lib_macros = { path = "./server/lib-macros", version = "=1.12.2" }
+kanidmd_testkit = { path = "./server/testkit", version = "=1.12.2" }
+kanidm_build_profiles = { path = "./libs/profiles", version = "=1.12.2" }
+kanidm_client = { path = "./libs/client", version = "=1.12.2" }
+kanidm_lib_crypto = { path = "./libs/crypto", version = "=1.12.2" }
+kanidm_lib_file_permissions = { path = "./libs/file_permissions", version = "=1.12.2" }
+kanidm_proto = { path = "./proto", version = "=1.12.2" }
+kanidm_utils_users = { path = "./libs/users", version = "=1.12.2" }
+nss_sparkle_common = { path = "./unix_integration/nss_sparkle_common", version = "=1.12.2" }
+pam_sparkle_common = { path = "./unix_integration/pam_sparkle_common", version = "=1.12.2" }
+rlm_kanidm_shared = { path = "./rlm_kanidm/shared", version = "=1.12.2" }
+sparkle_unix_common = { path = "./unix_integration/common", version = "=1.12.2" }
+sparkle_resolver_common = { path = "./unix_integration/resolver_common", version = "=1.12.2" }
+scim_proto = { path = "./libs/scim_proto", version = "=1.12.2" }
+sketching = { path = "./libs/sketching", version = "=1.12.2" }
 
 kanidm-hsm-crypto = { version = "^0.4.0" }
 
