@@ -4,7 +4,7 @@
 /*
  * process.h	State machine for a server to process packets.
  *
- * Version:	$Id: 35a91bfa55ba1c5ae0f79d126c09a6e9594559ab $
+ * Version:	$Id: 75fc50463d14933c21ab641deab50c42ec9eeab9 $
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -24,10 +24,10 @@
  * Copyright 2012 Alan DeKok <aland@deployingradius.com>
  */
 
-RCSIDH(process_h, "$Id: 35a91bfa55ba1c5ae0f79d126c09a6e9594559ab $")
+RCSIDH(process_h, "$Id: 75fc50463d14933c21ab641deab50c42ec9eeab9 $")
 
-#include <freeradius/clients.h>
-#include <freeradius/listen.h>
+#include <freeradius-devel/clients.h>
+#include <freeradius-devel/listen.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,6 +53,7 @@ typedef enum fr_state_action_t {	/* server action */
 	FR_ACTION_CLEANUP_DELAY,
 	FR_ACTION_COA_CANCELLED,
 } fr_state_action_t;
+#define FR_ACTION_MAX (FR_ACTION_COA_CANCELLED + 1)
 
 /*
  *  Function handler for requests.
@@ -73,11 +74,15 @@ int request_receive(TALLOC_CTX *ctx, rad_listen_t *listener, RADIUS_PACKET *pack
 		    RADCLIENT *client, RAD_REQUEST_FUNP fun);
 void request_inject(REQUEST *request);
 
-#ifdef WITH_PROXY
-int request_proxy_reply(RADIUS_PACKET *packet);
+bool radius_event_fd_full(void);
 
-void proxy_listener_freeze(rad_listen_t *listener, fr_event_fd_handler_t write_handler);
-void proxy_listener_thaw(rad_listen_t *listener);
+#ifdef WITH_PROXY
+int request_proxy_reply(rad_listen_t *listener, RADIUS_PACKET *packet);
+#endif
+
+#ifdef WITH_TCP
+void tcp_socket_freeze(rad_listen_t *listener, fr_event_fd_handler_t write_handler);
+void tcp_socket_thaw(rad_listen_t *listener);
 #endif
 
 #ifdef __cplusplus

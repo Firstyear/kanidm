@@ -27,7 +27,7 @@
 
 RCSIDH(connection_h, "$Id: 1fd4be4c8e79acc02961bb60437d688a15fb54ff $")
 
-#include <freeradius/conffile.h>
+#include <freeradius-devel/conffile.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -17,7 +17,7 @@
 #ifndef CLIENTS_H
 #define CLIENTS_H
 /*
- * $Id: 426b96eae3994469de0dd86a8f6626e1a9a20a0c $
+ * $Id: dfbc5e4010552d2ee0856207d547709a624bee53 $
  *
  * @file clients.h
  * @brief Function declarations and structures to manage clients.
@@ -47,6 +47,9 @@ typedef struct radclient {
 
 	bool			dynamic_require_ma;	//!< for dynamic clients
 	bool			protocol_error;		//!< can receive Protocol-Error replies
+#ifdef WITH_COA_TUNNEL
+	bool			reverse_coa;		//!< can receive CoA requests on its own connection
+#endif
 
 	fr_bool_auto_t 		limit_proxy_state;     	//!< Limit Proxy-State in requests
 
@@ -164,7 +167,7 @@ int		client_map_section(CONF_SECTION *out, CONF_SECTION const *map, client_value
 RADCLIENT	*client_afrom_cs(TALLOC_CTX *ctx, CONF_SECTION *cs, bool in_server, bool with_coa);
 
 RADCLIENT	*client_afrom_query(TALLOC_CTX *ctx, char const *identifier, char const *secret, char const *shortname,
-				    char const *type, char const *server, bool require_ma)
+				    char const *type, char const *server)
 		CC_HINT(nonnull(2, 3));
 
 RADCLIENT	*client_find(RADCLIENT_LIST const *clients, fr_ipaddr_t const *ipaddr, int proto);
@@ -173,7 +176,7 @@ RADCLIENT	*client_findbynumber(RADCLIENT_LIST const *clients, int number);
 
 RADCLIENT	*client_find_old(fr_ipaddr_t const *ipaddr);
 
-bool		client_add_dynamic(RADCLIENT_LIST *clients, RADCLIENT *master, RADCLIENT *c);
+RADCLIENT	*client_add_dynamic(RADCLIENT_LIST *clients, RADCLIENT *master, RADCLIENT *c, bool can_free);
 
 RADCLIENT	*client_read(char const *filename, int in_server, int flag);
 #endif	/* CLIENTS_H */

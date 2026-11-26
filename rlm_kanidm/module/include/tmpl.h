@@ -72,7 +72,7 @@
 
 RCSIDH(tmpl_h, "$Id: 92884b186bddef23432c4ad74bd1dc1d10c6466c $")
 
-#include <freeradius/xlat.h>
+#include <freeradius-devel/xlat.h>
 
 #ifdef __cplusplus
 extern "C" {

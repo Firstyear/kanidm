@@ -24,15 +24,20 @@ COPY . /src/kanidm/
 
 WORKDIR /src/kanidm/
 
-# TEMPORARY
+# FreeRADIUS does not correctly install it's own headers.
 RUN cp rlm_kanidm/module/include/automask.h /usr/include/freeradius/
 RUN cp rlm_kanidm/module/include/connection.h /usr/include/freeradius/
+RUN cp rlm_kanidm/module/include/conffile.h /usr/include/freeradius/
+RUN cp rlm_kanidm/module/include/dlist.h /usr/include/freeradius/
 RUN cp rlm_kanidm/module/include/log.h /usr/include/freeradius/
 RUN cp rlm_kanidm/module/include/xlat.h /usr/include/freeradius/
 RUN cp rlm_kanidm/module/include/tmpl.h /usr/include/freeradius/
+RUN cp rlm_kanidm/module/include/token.h /usr/include/freeradius/
 RUN cp rlm_kanidm/module/include/clients.h /usr/include/freeradius/
 RUN cp rlm_kanidm/module/include/process.h /usr/include/freeradius/
 RUN cp rlm_kanidm/module/include/listen.h /usr/include/freeradius/
+
+RUN ln -s /usr/include/freeradius /usr/include/freeradius-devel
 
 RUN --mount=type=cache,id=cargo,target=/cargo \
     --mount=type=cache,id=sccache,target=/sccache \
@@ -42,7 +47,6 @@ RUN --mount=type=cache,id=cargo,target=/cargo \
     export CC="/usr/bin/clang" && \
     cargo build --locked -p rlm_kanidm --features extern-freeradius-module --lib --release && \
     cargo build --locked -p kanidm_radiusd --bin kanidm_radiusd --release && \
-    cp /src/kanidm/target/release/librlm_kanidm.so /src/kanidm/target/release/rlm_kanidm.so && \
     sccache -s
 
 # ======================
@@ -67,7 +71,7 @@ COPY rlm_kanidm/container/sites-available/ /etc/raddb/sites-available/
 RUN ln -s /etc/raddb/mods-available/kanidm_rust /etc/raddb/mods-enabled/kanidm && \
     ln -s /etc/raddb/sites-available/check-eap-tls /etc/raddb/sites-enabled/check-eap-tls
 
-COPY --from=builder /src/kanidm/target/release/rlm_kanidm.so /usr/lib64/freeradius/rlm_kanidm.so
+COPY --from=builder /src/kanidm/target/release/librlm_kanidm.so /usr/lib64/freeradius/rlm_kanidm.so
 COPY --from=builder /src/kanidm/target/release/kanidm_radiusd /usr/local/bin/kanidm_radiusd
 
 # # disable auth via methods we don't support!

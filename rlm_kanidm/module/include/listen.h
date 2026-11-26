@@ -16,7 +16,7 @@
 #ifndef LISTEN_H
 #define LISTEN_H
 /**
- * $Id: 1d952272946bf835720c7e4f947c68af848695c4 $
+ * $Id: 6e958f615377c5cae9960d28004de1ad62411bf1 $
  *
  * @file listen.h
  * @brief The listener API.
@@ -47,7 +47,7 @@ typedef enum RAD_LISTEN_STATUS {
 	RAD_LISTEN_STATUS_KNOWN,		//!< alive and operating normally
 	RAD_LISTEN_STATUS_PAUSE,		//!< TLS connection checking: don't read normal packets
 	RAD_LISTEN_STATUS_RESUME,		//!< TLS connection checking: resume reading normal packets
-	RAD_LISTEN_STATUS_FROZEN,		//!< alive, but we're not sending any more packets to it
+	RAD_LISTEN_STATUS_DRAINING,		//!< alive, but we're not sending any more packets to it
 	RAD_LISTEN_STATUS_EOL,			//!< we're trying to delete it.
 	RAD_LISTEN_STATUS_REMOVE_NOW		//!< no request is using it, delete the listener.
 } RAD_LISTEN_STATUS;
@@ -62,6 +62,7 @@ typedef int (*rad_listen_decode_t)(rad_listen_t *, REQUEST *);
 
 struct rad_listen {
 	rad_listen_t *next; /* should be rbtree stuff */
+	bool	     fd_updating;
 
 	/*
 	 *	For normal sockets.
@@ -75,30 +76,36 @@ struct rad_listen {
 	rbtree_t	*children;
 	rad_listen_t	*parent;
 
-	bool		dual;
 	bool		proxy_protocol;		//!< haproxy protocol
 	bool		listen;			//! just calls listen()
+	bool		blocked;		//!< writes are frozen until the socket is writable
 #endif
+	bool		dual;
 	bool		nodup;
 	bool		dead;
+	bool		filter_proxy_state;	//!< Whether to filter Proxy-State
+	uint32_t	proxy_state_random[2];	//!< seed for Proxy-State
 
 #ifdef WITH_TLS
 	fr_tls_server_conf_t *tls;
 	bool		check_client_connections;
-	bool		nonblock;
-	bool		blocked;
+
+	fr_dlist_t		entry;		//!< for the home server free list
+
 #ifdef WITH_RADIUSV11
 	fr_radiusv11_t 	radiusv11;
 #endif
 
 #ifdef WITH_COA_TUNNEL
-	char const	*key;		/* Originating-Realm-Key */
+	char const	*key;		/* the first Originating-Realm-Key */
+	uint32_t	num_keys;
 	bool		send_coa;	/* to the NAS */
 
 	uint32_t	coa_irt;
 	uint32_t	coa_mrc;
 	uint32_t	coa_mrt;
 	uint32_t	coa_mrd;
+	uint32_t	coa_max_keys;
 
 	int		num_ids_used;	/* for proxying CoA packets */
 #endif
@@ -178,6 +185,18 @@ typedef struct listen_socket_t {
 	fr_ipaddr_t	haproxy_dst_ipaddr;
 	uint16_t	haproxy_src_port;
 	uint16_t	haproxy_dst_port;
+
+	bool		connection_counted;	//!< this connection is counted in home->active_connections
+	bool		connected;		//!< was this socket connected?
+
+	pthread_mutex_t *mutex;			//!< protects the buffered write state
+	fr_event_fd_handler_t write_handler;	//!< installed when the socket joins the event loop
+
+	uint8_t		*read_buf;		//!< one partial packet read from a proxy socket
+	size_t		read_used;		//!< bytes in read_buf
+	uint8_t		*write_buf;		//!< packets which write() did not accept
+	size_t		write_used;		//!< bytes in write_buf
+	bool		connecting;		//!< the connect timer has seen this socket unconnected
 #endif
 
 #ifdef WITH_TLS
@@ -185,11 +204,9 @@ typedef struct listen_socket_t {
 	REQUEST		*request; /* horrible hacks */
 	VALUE_PAIR	*certs;
 	uint32_t	connect_timeout;
-	pthread_mutex_t mutex;
 	uint8_t		*data;
 	size_t		partial;
 
-	fr_event_fd_handler_t write_handler;
 	enum {
 		LISTEN_TLS_INIT = 0,
 		LISTEN_TLS_CHECKING,
@@ -207,5 +224,17 @@ typedef struct listen_socket_t {
 
 	RADCLIENT_LIST	*clients;
 } listen_socket_t;
+
+#ifdef WITH_PROXY
+void proxy_stats(rad_listen_t *listener, home_server_t *home, int code, size_t offset, time_t when);
+uint32_t proxy_state_hash(uint32_t seed[static 2], fr_ipaddr_t const *home_ip, int home_port);
+bool proxy_state_hash_check(rad_listen_t *listener, RADIUS_PACKET *packet);
+
+#ifdef WITH_TCP
+void		home_server_active_connections_increment(rad_listen_t *listener);
+void		home_server_active_connections_decrement(rad_listen_t *listener);
+#endif
+#endif
+
 #endif /* LISTEN_H */
 
