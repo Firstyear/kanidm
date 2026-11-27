@@ -3008,7 +3008,8 @@ impl<'a> QueryServerWriteTransaction<'a> {
     }
 
     fn force_domain_reload(&mut self) {
-        self.changed_flags.insert(ChangeFlag::DOMAIN);
+        self.changed_flags
+            .insert(ChangeFlag::DOMAIN | ChangeFlag::SYSTEM_CONFIG);
     }
 
     pub(crate) fn upgrade_reindex(&mut self, v: i64) -> Result<(), OperationError> {

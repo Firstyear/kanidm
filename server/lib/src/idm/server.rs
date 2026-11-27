@@ -236,6 +236,7 @@ impl IdmServer {
 
         let mut idm_write_txn = idm_server.proxy_write(current_time).await?;
 
+        // Now reload everything on bring up.
         idm_write_txn.reload_applications()?;
         idm_write_txn.reload_oauth2()?;
         idm_write_txn.reload_oauth2_client_providers()?;
