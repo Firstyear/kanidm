@@ -266,19 +266,31 @@ struct TokenExchangeCode {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) enum Oauth2TokenType {
+    Access {
+        scopes: BTreeSet<String>,
+        session_id: Uuid,
+        parent_session_id: Option<Uuid>,
+        uuid: Uuid,
+        exp: i64,
+        iat: i64,
+        nbf: i64,
+        // We stash some details here for oidc.
+        nonce: Option<String>,
+        auth_time: Option<i64>,
+    },
     Refresh {
         scopes: BTreeSet<String>,
-        parent_session_id: Option<Uuid>,
         session_id: Uuid,
+        parent_session_id: Option<Uuid>,
         exp: i64,
         uuid: Uuid,
-        //
         iat: i64,
         nbf: i64,
         // We stash some details here for oidc.
         nonce: Option<String>,
         auth_time: Option<OffsetDateTime>,
     },
+    // This is a token created through client-credentials grant.
     ClientAccess {
         scopes: BTreeSet<String>,
         session_id: Uuid,
@@ -292,6 +304,9 @@ pub(crate) enum Oauth2TokenType {
 impl fmt::Display for Oauth2TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Oauth2TokenType::Access { session_id, .. } => {
+                write!(f, "access_token ({session_id})")
+            }
             Oauth2TokenType::Refresh { session_id, .. } => {
                 write!(f, "refresh_token ({session_id}) ")
             }
@@ -565,6 +580,8 @@ pub struct Oauth2RS {
     type_: OauthRSType,
     /// Does the RS have a custom image set? If not, we use the default.
     has_custom_image: bool,
+    /// If the access token is rfc9068 or not.
+    rfc9068_access_tokens: bool,
 
     device_authorization_endpoint: Option<Url>,
 }
@@ -969,6 +986,10 @@ impl Oauth2ResourceServersWriteTransaction<'_> {
                     .get_ava_single_bool(Attribute::OAuth2PreferShortUsername)
                     .unwrap_or(false);
 
+                let rfc9068_access_tokens = ent
+                    .get_ava_single_bool(Attribute::OAuth2RFC9068Tokens)
+                    .unwrap_or(domain_level <= DOMAIN_LEVEL_1_13);
+
                 let has_custom_image = ent.get_ava_single_image(Attribute::Image).is_some();
 
                 let refresh_token_expiry = ent
@@ -1051,6 +1072,7 @@ impl Oauth2ResourceServersWriteTransaction<'_> {
                     type_,
                     has_custom_image,
                     device_authorization_endpoint,
+                    rfc9068_access_tokens,
                 };
 
                 Ok((client_id, rscfg))
@@ -1155,7 +1177,13 @@ impl IdmServerProxyWriteTransaction<'_> {
                 })?;
 
             match token {
-                Oauth2TokenType::ClientAccess {
+                Oauth2TokenType::Access {
+                    session_id,
+                    exp,
+                    uuid,
+                    ..
+                }
+                | Oauth2TokenType::ClientAccess {
                     session_id,
                     exp,
                     uuid,
@@ -1655,8 +1683,7 @@ impl IdmServerProxyWriteTransaction<'_> {
             })?;
 
         match token {
-            // Oauth2TokenType::Access { .. } |
-            Oauth2TokenType::ClientAccess { .. } => {
+            Oauth2TokenType::Access { .. } | Oauth2TokenType::ClientAccess { .. } => {
                 admin_error!("attempt to refresh with an access token");
                 Err(Oauth2Error::InvalidRequest)
             }
@@ -2051,7 +2078,9 @@ impl IdmServerProxyWriteTransaction<'_> {
 
         let auth_time = session_ctx.auth_time;
 
-        let id_token = if scopes.contains(OAUTH2_SCOPE_OPENID) {
+        let openid_client = scopes.contains(OAUTH2_SCOPE_OPENID);
+
+        let id_token = if openid_client {
             // TODO: Scopes map to claims:
             //
             // * profile - (name, family\_name, given\_name, middle\_name, nickname, preferred\_username, profile, picture, website, gender, birthdate, zoneinfo, locale, and updated\_at)
@@ -2118,42 +2147,78 @@ impl IdmServerProxyWriteTransaction<'_> {
             None
         };
 
-        // We need to record this into the record? Delayed action?
-        let access_token_data = OAuth2RFC9068Token {
-            iss: iss.to_string(),
-            sub: session_ctx.account_uuid,
-            aud,
-            exp,
-            nbf: iat,
-            iat,
-            jti: session_id,
-            client_id,
-            extensions: OAuth2RFC9068TokenExtensions {
-                auth_time: auth_time.map(|at| at.unix_timestamp()),
-                acr: None,
-                amr: None,
-                scope: scopes.clone(),
-                nonce: session_ctx.nonce.clone(),
-                session_id,
-                parent_session_id,
-            },
-        };
+        let domain_level = self.qs_write.get_domain_version();
 
-        let access_token_data = JwsBuilder::into_json(&access_token_data)
-            .map(|builder| builder.set_typ(Some("at+jwt")).build())
-            .map_err(|err| {
-                error!(?err, "Unable to encode access token data");
-                Oauth2Error::ServerError(OperationError::InvalidState)
-            })?;
+        let access_token =
+            if (!openid_client && o2rs.rfc9068_access_tokens) || domain_level < DOMAIN_LEVEL_1_12 {
+                let access_token_data = OAuth2RFC9068Token {
+                    iss: iss.to_string(),
+                    sub: session_ctx.account_uuid,
+                    aud,
+                    exp,
+                    nbf: iat,
+                    iat,
+                    jti: session_id,
+                    client_id,
+                    extensions: OAuth2RFC9068TokenExtensions {
+                        auth_time: auth_time.map(|at| at.unix_timestamp()),
+                        acr: None,
+                        amr: None,
+                        scope: scopes.clone(),
+                        nonce: session_ctx.nonce.clone(),
+                        session_id,
+                        parent_session_id,
+                    },
+                };
 
-        let access_token = match o2rs.sign_alg {
-            SignatureAlgo::Es256 => o2rs.key_object.jws_es256_sign(&access_token_data, ct),
-            SignatureAlgo::Rs256 => o2rs.key_object.jws_rs256_sign(&access_token_data, ct),
-        }
-        .map_err(|e| {
-            admin_error!(err = ?e, "Unable to sign access token data");
-            Oauth2Error::ServerError(OperationError::InvalidState)
-        })?;
+                let access_token_data = JwsBuilder::into_json(&access_token_data)
+                    .map(|builder| builder.set_typ(Some("at+jwt")).build())
+                    .map_err(|err| {
+                        error!(?err, "Unable to encode access token data");
+                        Oauth2Error::ServerError(OperationError::InvalidState)
+                    })?;
+
+                let access_token = match o2rs.sign_alg {
+                    SignatureAlgo::Es256 => o2rs.key_object.jws_es256_sign(&access_token_data, ct),
+                    SignatureAlgo::Rs256 => o2rs.key_object.jws_rs256_sign(&access_token_data, ct),
+                }
+                .map_err(|e| {
+                    admin_error!(err = ?e, "Unable to sign access token data");
+                    Oauth2Error::ServerError(OperationError::InvalidState)
+                })?;
+
+                access_token.to_string()
+            } else {
+                let access_token_raw = Oauth2TokenType::Access {
+                    scopes: scopes.clone(),
+                    session_id,
+                    parent_session_id,
+                    uuid: session_ctx.account_uuid,
+                    exp,
+                    iat,
+                    nbf: iat,
+                    nonce: session_ctx.nonce.clone(),
+                    auth_time: auth_time.map(|at| at.unix_timestamp()),
+                };
+
+                let access_token_data = JweBuilder::into_json(&access_token_raw)
+                    .map(|builder| builder.build())
+                    .map_err(|err| {
+                        error!(?err, "Unable to encode token data");
+                        Oauth2Error::ServerError(OperationError::SerdeJsonError)
+                    })?;
+
+                let access_token = o2rs
+                    .key_object
+                    .jwe_a256gcm_encrypt(&access_token_data, ct)
+                    .map(|jwe| jwe.to_string())
+                    .map_err(|err| {
+                        error!(?err, "Unable to encrypt token data");
+                        Oauth2Error::ServerError(OperationError::CryptographyError)
+                    })?;
+
+                access_token.to_string()
+            };
 
         let refresh_token_raw = Oauth2TokenType::Refresh {
             scopes,
@@ -2173,8 +2238,6 @@ impl IdmServerProxyWriteTransaction<'_> {
                 error!(?err, "Unable to encode token data");
                 Oauth2Error::ServerError(OperationError::SerdeJsonError)
             })?;
-
-        let domain_level = self.qs_write.get_domain_version();
 
         let refresh_token = if domain_level >= DOMAIN_LEVEL_1_12 {
             o2rs.key_object
@@ -2228,7 +2291,7 @@ impl IdmServerProxyWriteTransaction<'_> {
             })?;
 
         Ok(AccessTokenResponse {
-            access_token: access_token.to_string(),
+            access_token,
             token_type: AccessTokenType::Bearer,
             issued_token_type: Some(IssuedTokenType::AccessToken),
             expires_in,
@@ -2969,7 +3032,16 @@ impl IdmServerProxyReadTransaction<'_> {
             })?;
 
         match token {
-            Oauth2TokenType::ClientAccess {
+            Oauth2TokenType::Access {
+                scopes,
+                session_id,
+                uuid,
+                exp,
+                iat,
+                nbf,
+                ..
+            }
+            | Oauth2TokenType::ClientAccess {
                 scopes,
                 session_id,
                 uuid,
@@ -3035,6 +3107,126 @@ impl IdmServerProxyReadTransaction<'_> {
 
     #[instrument(level = "debug", skip_all)]
     pub fn oauth2_openid_userinfo(
+        &mut self,
+        client_id: &str,
+        client_authz: &ClientAuthInfo,
+        ct: Duration,
+    ) -> Result<OidcToken, Oauth2Error> {
+        if let Some(jwsc) = client_authz.bearer_token_jws() {
+            self.oauth2_openid_userinfo_jwt(client_id, jwsc, ct)
+        } else if let Some(jwec) = client_authz.bearer_token_jwe() {
+            self.oauth2_openid_userinfo_jwe(client_id, jwec, ct)
+        } else {
+            error!("Failed to deserialise a valid JWT/JWE");
+            Err(Oauth2Error::AuthenticationRequired)
+        }
+    }
+
+    fn oauth2_openid_userinfo_jwe(
+        &mut self,
+        client_id: &str,
+        jwec: &JweCompact,
+        ct: Duration,
+    ) -> Result<OidcToken, Oauth2Error> {
+        // DANGER: Why do we have to do this? During the use of qs for internal search
+        // and other operations we need qs to be mut. But when we borrow oauth2rs here we
+        // cause multiple borrows to occur on struct members that freaks rust out. This *IS*
+        // safe however because no element of the search or write process calls the oauth2rs
+        // excepting for this idm layer within a single thread, meaning that stripping the
+        // lifetime here is safe since we are the sole accessor.
+        let o2rs: &Oauth2RS = unsafe {
+            let s = self.oauth2rs.inner.rs_set_get(client_id).ok_or_else(|| {
+                warn!("Invalid OAuth2 client_id (have you configured the OAuth2 resource server?)");
+                Oauth2Error::InvalidClientId
+            })?;
+            &*(s as *const _)
+        };
+
+        let token: Oauth2TokenType = o2rs
+            .key_object
+            .jwe_decrypt(jwec)
+            .map_err(|_| {
+                admin_error!("Failed to decrypt token introspection request");
+                Oauth2Error::AuthenticationRequired
+            })
+            .and_then(|jwe| {
+                jwe.from_json().map_err(|err| {
+                    error!(?err, "Failed to deserialise token");
+                    Oauth2Error::InvalidRequest
+                })
+            })?;
+
+        let Oauth2TokenType::Access {
+            scopes,
+            session_id,
+            parent_session_id,
+            uuid,
+            exp,
+            iat,
+            nbf,
+            nonce,
+            auth_time,
+        } = token
+        else {
+            info!("Incorrect token type during userinfo request");
+            return Err(Oauth2Error::InvalidToken);
+        };
+
+        // Has this token expired?
+        if exp <= ct.as_secs() as i64 {
+            info!(
+                sub = ?uuid,
+            "access token has expired, returning inactive");
+            return Err(Oauth2Error::InvalidToken);
+        }
+
+        // Is the user expired, or the OAuth2 session invalid?
+        let valid = self
+            .check_oauth2_account_uuid_valid(uuid, session_id, parent_session_id, iat, ct)
+            .map_err(|_| admin_error!("Account is not valid"));
+
+        let Ok(Some(entry)) = valid else {
+            security_info!(
+                sub = ?uuid,
+                "access token has account not valid, returning inactive"
+            );
+            return Err(Oauth2Error::InvalidToken);
+        };
+
+        let account = match Account::try_from_entry_ro(&entry, &mut self.qs_read) {
+            Ok(account) => account,
+            Err(err) => return Err(Oauth2Error::ServerError(err)),
+        };
+
+        let amr = None;
+
+        let iss = o2rs.iss.clone();
+
+        let s_claims = s_claims_for_account(o2rs, &account, &scopes);
+        let extra_claims = extra_claims_for_account(&account, &o2rs.claim_map, &scopes);
+
+        // ==== good to generate response ====
+
+        Ok(OidcToken {
+            iss,
+            sub: OidcSubject::U(uuid),
+            aud: client_id.to_string(),
+            iat,
+            nbf: Some(nbf),
+            exp,
+            auth_time,
+            nonce,
+            at_hash: None,
+            acr: None,
+            amr,
+            azp: Some(client_id.to_string()),
+            jti: Some(session_id.to_string()),
+            s_claims,
+            claims: extra_claims,
+        })
+    }
+
+    fn oauth2_openid_userinfo_jwt(
         &mut self,
         client_id: &str,
         token: &JwsCompact,
@@ -3712,9 +3904,8 @@ mod tests {
     };
     use base64::{engine::general_purpose, Engine as _};
     use compact_jwt::{
-        compact::JwkUse, crypto::JwsRs256Verifier, dangernoverify::JwsDangerReleaseWithoutVerify,
-        JwaAlg, Jwk, JwsCompact, JwsEs256Verifier, JwsVerifier, OidcSubject, OidcToken,
-        OidcUnverified,
+        compact::JwkUse, crypto::JwsRs256Verifier, JwaAlg, JweCompact, Jwk, JwsEs256Verifier,
+        JwsVerifier, OidcSubject, OidcToken, OidcUnverified,
     };
     use kanidm_lib_crypto::CryptoPolicy;
     use kanidm_proto::{
@@ -5346,20 +5537,23 @@ mod tests {
             .check_oauth2_token_exchange(&client_authz, &token_req, ct)
             .expect("Unable to exchange for OAuth2 token");
 
-        let access_token =
-            JwsCompact::from_str(&oauth2_token.access_token).expect("Invalid Access Token");
-
-        let jws_verifier = JwsDangerReleaseWithoutVerify::default();
-
-        let reflected_token = jws_verifier
-            .verify(&access_token)
-            .unwrap()
-            .from_json::<OAuth2RFC9068Token<OAuth2RFC9068TokenExtensions>>()
-            .expect("Failed to access internals of the refresh token");
-
-        let session_id = reflected_token.extensions.session_id;
-
         assert!(idms_prox_write.commit().is_ok());
+
+        // Okay, now we have the token, we can check it works with introspect.
+        let mut idms_prox_read = idms.proxy_read().await.unwrap();
+
+        let intr_request = AccessTokenIntrospectRequest {
+            token: oauth2_token.access_token.clone(),
+            token_type_hint: None,
+            client_post_auth: ClientPostAuth::default(),
+        };
+        let intr_response = idms_prox_read
+            .check_oauth2_token_introspect(&intr_request, ct)
+            .expect("Failed to inspect token");
+
+        let session_id = intr_response.jti;
+
+        drop(idms_prox_read);
 
         // Process it to ensure the record exists.
         let mut idms_prox_write = idms.proxy_write(ct).await.unwrap();
@@ -5851,7 +6045,7 @@ mod tests {
         let id_token = token_response.id_token.expect("No id_token in response!");
 
         let access_token =
-            JwsCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
+            JweCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
 
         let refresh_token = token_response
             .refresh_token
@@ -5924,7 +6118,11 @@ mod tests {
         // Does our access token work with the userinfo endpoint?
         // Do the id_token details line up to the userinfo?
         let userinfo = idms_prox_read
-            .oauth2_openid_userinfo("test_resource_server", &access_token, ct)
+            .oauth2_openid_userinfo(
+                "test_resource_server",
+                &ClientAuthInfo::from(access_token),
+                ct,
+            )
             .expect("failed to get userinfo");
 
         assert_eq!(oidc.iss, userinfo.iss);
@@ -5964,7 +6162,7 @@ mod tests {
             .expect("Unable to exchange for OAuth2 token");
 
         let access_token =
-            JwsCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
+            JweCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
 
         assert!(idms_prox_write.commit().is_ok());
 
@@ -5972,7 +6170,11 @@ mod tests {
         let mut idms_prox_read = idms.proxy_read().await.unwrap();
 
         let userinfo = idms_prox_read
-            .oauth2_openid_userinfo("test_resource_server", &access_token, ct)
+            .oauth2_openid_userinfo(
+                "test_resource_server",
+                &ClientAuthInfo::from(access_token),
+                ct,
+            )
             .expect("failed to get userinfo");
 
         assert_eq!(oidc.iss, userinfo.iss);
@@ -6045,7 +6247,7 @@ mod tests {
 
         let id_token = token_response.id_token.expect("No id_token in response!");
         let access_token =
-            JwsCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
+            JweCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
 
         assert!(idms_prox_write.commit().is_ok());
         let mut idms_prox_read = idms.proxy_read().await.unwrap();
@@ -6076,7 +6278,11 @@ mod tests {
         );
         // Do the id_token details line up to the userinfo?
         let userinfo = idms_prox_read
-            .oauth2_openid_userinfo("test_resource_server", &access_token, ct)
+            .oauth2_openid_userinfo(
+                "test_resource_server",
+                &ClientAuthInfo::from(access_token),
+                ct,
+            )
             .expect("failed to get userinfo");
 
         assert_eq!(oidc.s_claims, userinfo.s_claims);
@@ -6106,7 +6312,7 @@ mod tests {
 
         let id_token = token_response.id_token.expect("No id_token in response!");
         let access_token =
-            JwsCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
+            JweCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
 
         let oidc = validate_id_token(idms, ct, &id_token).await;
 
@@ -6125,7 +6331,11 @@ mod tests {
 
         // Do the id_token details line up to the userinfo?
         let userinfo = idms_prox_read
-            .oauth2_openid_userinfo("test_resource_server", &access_token, ct)
+            .oauth2_openid_userinfo(
+                "test_resource_server",
+                &ClientAuthInfo::from(access_token),
+                ct,
+            )
             .expect("failed to get userinfo");
 
         // does the userinfo endpoint provide the same groups?
@@ -6182,7 +6392,7 @@ mod tests {
 
         let id_token = token_response.id_token.expect("No id_token in response!");
         let access_token =
-            JwsCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
+            JweCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
 
         let oidc = validate_id_token(idms, ct, &id_token).await;
 
@@ -6201,7 +6411,11 @@ mod tests {
 
         // Do the id_token details line up to the userinfo?
         let userinfo = idms_prox_read
-            .oauth2_openid_userinfo("test_resource_server", &access_token, ct)
+            .oauth2_openid_userinfo(
+                "test_resource_server",
+                &ClientAuthInfo::from(access_token),
+                ct,
+            )
             .expect("failed to get userinfo");
 
         // does the userinfo endpoint provide the same groups?
@@ -6291,7 +6505,7 @@ mod tests {
 
         let id_token = token_response.id_token.expect("No id_token in response!");
         let access_token =
-            JwsCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
+            JweCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
 
         assert!(idms_prox_write.commit().is_ok());
         let mut idms_prox_read = idms.proxy_read().await.unwrap();
@@ -6328,7 +6542,11 @@ mod tests {
 
         // Do the id_token details line up to the userinfo?
         let userinfo = idms_prox_read
-            .oauth2_openid_userinfo("test_resource_server", &access_token, ct)
+            .oauth2_openid_userinfo(
+                "test_resource_server",
+                &ClientAuthInfo::from(access_token),
+                ct,
+            )
             .expect("failed to get userinfo");
 
         // does the userinfo endpoint provide the same groups?
@@ -7084,8 +7302,7 @@ mod tests {
 
         let refresh_exp = match reflected_token {
             Oauth2TokenType::Refresh { exp, .. } => exp,
-            // Oauth2TokenType::Access { .. } |
-            Oauth2TokenType::ClientAccess { .. } => unreachable!(),
+            Oauth2TokenType::Access { .. } | Oauth2TokenType::ClientAccess { .. } => unreachable!(),
         };
 
         let token_req: AccessTokenRequest = GrantTypeReq::RefreshToken {
@@ -7523,19 +7740,7 @@ mod tests {
             .clone();
 
         // Get the initial scopes.
-        let jws_verifier = JwsDangerReleaseWithoutVerify::default();
-
-        let access_token_unverified = JwsCompact::from_str(&access_token_response_1.access_token)
-            .expect("Invalid Access Token");
-
-        let reflected_token = jws_verifier
-            .verify(&access_token_unverified)
-            .unwrap()
-            .from_json::<OAuth2RFC9068Token<OAuth2RFC9068TokenExtensions>>()
-            .expect("Failed to access internals of the refresh token");
-
-        trace!(?reflected_token);
-        let initial_scopes = reflected_token.extensions.scope;
+        let initial_scopes = access_token_response_1.scope;
         trace!(?initial_scopes);
 
         // Should be the same scopes as initial.
@@ -7549,16 +7754,7 @@ mod tests {
             .check_oauth2_token_exchange(&client_authz, &token_req, ct)
             .expect("Unable to exchange for OAuth2 token");
 
-        let access_token_unverified = JwsCompact::from_str(&access_token_response_2.access_token)
-            .expect("Invalid Access Token");
-
-        let reflected_token = jws_verifier
-            .verify(&access_token_unverified)
-            .unwrap()
-            .from_json::<OAuth2RFC9068Token<OAuth2RFC9068TokenExtensions>>()
-            .expect("Failed to access internals of the refresh token");
-
-        assert_eq!(initial_scopes, reflected_token.extensions.scope);
+        assert_eq!(initial_scopes, access_token_response_2.scope);
 
         let refresh_token = access_token_response_2
             .refresh_token
@@ -7577,19 +7773,10 @@ mod tests {
             .check_oauth2_token_exchange(&client_authz, &token_req, ct)
             .expect("Unable to exchange for OAuth2 token");
 
-        let access_token_unverified = JwsCompact::from_str(&access_token_response_3.access_token)
-            .expect("Invalid Access Token");
-
-        let reflected_token = jws_verifier
-            .verify(&access_token_unverified)
-            .unwrap()
-            .from_json::<OAuth2RFC9068Token<OAuth2RFC9068TokenExtensions>>()
-            .expect("Failed to access internals of the refresh token");
-
-        assert_ne!(initial_scopes, reflected_token.extensions.scope);
+        assert_ne!(initial_scopes, access_token_response_3.scope);
 
         // Keep the constrained scopes.
-        let constrained_scopes = reflected_token.extensions.scope;
+        let constrained_scopes = access_token_response_3.scope;
 
         let refresh_token = access_token_response_3
             .refresh_token
@@ -7608,17 +7795,8 @@ mod tests {
             .check_oauth2_token_exchange(&client_authz, &token_req, ct)
             .expect("Unable to exchange for OAuth2 token");
 
-        let access_token_unverified = JwsCompact::from_str(&access_token_response_4.access_token)
-            .expect("Invalid Access Token");
-
-        let reflected_token = jws_verifier
-            .verify(&access_token_unverified)
-            .unwrap()
-            .from_json::<OAuth2RFC9068Token<OAuth2RFC9068TokenExtensions>>()
-            .expect("Failed to access internals of the refresh token");
-
-        assert_ne!(initial_scopes, reflected_token.extensions.scope);
-        assert_eq!(constrained_scopes, reflected_token.extensions.scope);
+        assert_ne!(initial_scopes, access_token_response_4.scope);
+        assert_eq!(constrained_scopes, access_token_response_4.scope);
 
         let refresh_token = access_token_response_4
             .refresh_token
@@ -7798,7 +7976,7 @@ mod tests {
 
         let id_token = token_response.id_token.expect("No id_token in response!");
         let access_token =
-            JwsCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
+            JweCompact::from_str(&token_response.access_token).expect("Invalid Access Token");
 
         // Get the read txn for inspecting the tokens
         assert!(idms_prox_write.commit().is_ok());
@@ -7876,7 +8054,11 @@ mod tests {
         // Does our access token work with the userinfo endpoint?
         // Do the id_token details line up to the userinfo?
         let userinfo = idms_prox_read
-            .oauth2_openid_userinfo("test_resource_server", &access_token, ct)
+            .oauth2_openid_userinfo(
+                "test_resource_server",
+                &ClientAuthInfo::from(access_token),
+                ct,
+            )
             .expect("failed to get userinfo");
 
         assert_eq!(oidc.iss, userinfo.iss);

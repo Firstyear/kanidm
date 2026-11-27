@@ -453,6 +453,15 @@ pub static SCHEMA_ATTR_OAUTH2_STRICT_REDIRECT_URI_DL7: LazyLock<SchemaAttribute>
         ..Default::default()
     });
 
+pub static SCHEMA_ATTR_OAUTH2_RFC9068_TOKENS: LazyLock<SchemaAttribute> =
+    LazyLock::new(|| SchemaAttribute {
+        uuid: UUID_SCHEMA_ATTR_OAUTH2_RFC9068_TOKENS,
+        name: Attribute::OAuth2RFC9068Tokens,
+        description: "Represents if RFC9068 token issuance is enabled.".to_string(),
+        syntax: SyntaxType::Boolean,
+        ..Default::default()
+    });
+
 pub static SCHEMA_ATTR_ES256_PRIVATE_KEY_DER: LazyLock<SchemaAttribute> =
     LazyLock::new(|| SchemaAttribute {
         uuid: UUID_SCHEMA_ATTR_ES256_PRIVATE_KEY_DER,
@@ -1328,6 +1337,7 @@ pub static SCHEMA_CLASS_OAUTH2_RS_DL9: LazyLock<SchemaClass> = LazyLock::new(|| 
         Attribute::OAuth2Session,
         Attribute::OAuth2RsOrigin,
         Attribute::OAuth2StrictRedirectUri,
+        Attribute::OAuth2RFC9068Tokens,
         Attribute::OAuth2DeviceFlowEnable,
         Attribute::OAuth2ConsentPromptEnable,
         // Deprecated

@@ -1191,6 +1191,13 @@ pub enum Oauth2Opt {
     /// Enable the regular user consent prompt.
     #[clap(name = "enable-consent-prompt")]
     EnableConsentPrompt(Named),
+
+    #[clap(name = "warning-enable-rfc9068-tokens")]
+    /// Enable RFC9068 tokens. This feature will be removed in 1.15.0!!!
+    EnableRfc9068(Named),
+    #[clap(name = "disable-rfc9068-tokens")]
+    /// Disable RFC9068 tokens. This will be the default from 1.15.0.
+    DisableRfc9068(Named),
 }
 
 #[derive(Args, Debug, Clone)]

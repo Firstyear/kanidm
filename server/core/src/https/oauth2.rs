@@ -596,14 +596,9 @@ pub async fn oauth2_openid_userinfo_get(
     AuthorisationHeaders(client_auth_info): AuthorisationHeaders,
 ) -> Response {
     // The token we want to inspect is in the authorisation header.
-    let Some(client_token) = client_auth_info.bearer_token() else {
-        error!("Bearer Authentication Not Provided");
-        return WebError::OAuth2(Oauth2Error::AuthenticationRequired).into_response();
-    };
-
     let res = state
         .qe_r_ref
-        .handle_oauth2_openid_userinfo(client_id, client_token, kopid.eventid)
+        .handle_oauth2_openid_userinfo(client_id, &client_auth_info, kopid.eventid)
         .await;
 
     match res {

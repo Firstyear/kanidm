@@ -4,7 +4,7 @@ use axum::{
     http::{header::AUTHORIZATION, request::Parts, StatusCode},
 };
 use axum_extra::extract::cookie::CookieJar;
-use compact_jwt::JwsCompact;
+use compact_jwt::{JweCompact, JwsCompact};
 use kanidm_proto::internal::COOKIE_BEARER_TOKEN;
 use kanidmd_lib::prelude::{ClientAuthInfo, ClientCertInfo, Source};
 use std::{
@@ -35,48 +35,56 @@ impl FromRequestParts<ServerState> for VerifiedClientInformation {
             "request info contains invalid data",
         ))?;
 
-        let (basic_authz, bearer_token) = if let Some(header) = parts.headers.get(AUTHORIZATION) {
-            if let Some((authz_type, authz_data)) = header
-                .to_str()
-                .map_err(|err| {
-                    warn!(?err, "Invalid authz header, ignoring");
-                })
-                .ok()
-                .and_then(|s| s.split_once(' '))
-            {
-                let authz_type = authz_type.to_lowercase();
+        let (basic_authz, bearer_token_jws, bearer_token_jwe) =
+            if let Some(header) = parts.headers.get(AUTHORIZATION) {
+                if let Some((authz_type, authz_data)) = header
+                    .to_str()
+                    .map_err(|err| {
+                        warn!(?err, "Invalid authz header, ignoring");
+                    })
+                    .ok()
+                    .and_then(|s| s.split_once(' '))
+                {
+                    let authz_type = authz_type.to_lowercase();
 
-                if authz_type == "basic" {
-                    (Some(authz_data.to_string()), None)
-                } else if authz_type == "bearer" {
-                    if let Ok(jwsc) = JwsCompact::from_str(authz_data) {
-                        (None, Some(jwsc))
+                    if authz_type == "basic" {
+                        (Some(authz_data.to_string()), None, None)
+                    } else if authz_type == "bearer" {
+                        if let Ok(jwsc) = JwsCompact::from_str(authz_data) {
+                            (None, Some(jwsc), None)
+                        } else if let Ok(jwec) = JweCompact::from_str(authz_data) {
+                            (None, None, Some(jwec))
+                        } else {
+                            warn!("bearer invalid");
+                            (None, None, None)
+                        }
                     } else {
-                        warn!("bearer jws invalid");
-                        (None, None)
+                        warn!("authorisation header invalid, ignoring");
+                        (None, None, None)
                     }
                 } else {
-                    warn!("authorisation header invalid, ignoring");
-                    (None, None)
+                    (None, None, None)
                 }
             } else {
-                (None, None)
-            }
-        } else {
-            // Only if there are no credentials in bearer, do we examine cookies.
-            let jar = CookieJar::from_headers(&parts.headers);
+                // Only if there are no credentials in bearer, do we examine cookies.
+                let jar = CookieJar::from_headers(&parts.headers);
 
-            let value: Option<&str> = jar.get(COOKIE_BEARER_TOKEN).map(|c| c.value());
+                let value: Option<&str> = jar.get(COOKIE_BEARER_TOKEN).map(|c| c.value());
 
-            let maybe_bearer = value.and_then(|authz_data| JwsCompact::from_str(authz_data).ok());
+                let maybe_bearer_jws =
+                    value.and_then(|authz_data| JwsCompact::from_str(authz_data).ok());
 
-            (None, maybe_bearer)
-        };
+                let maybe_bearer_jwe =
+                    value.and_then(|authz_data| JweCompact::from_str(authz_data).ok());
+
+                (None, maybe_bearer_jws, maybe_bearer_jwe)
+            };
 
         let mut client_auth_info = ClientAuthInfo::new(
             Source::Https(client_ip_addr),
             client_cert,
-            bearer_token,
+            bearer_token_jws,
+            bearer_token_jwe,
             basic_authz,
         );
 
@@ -112,41 +120,45 @@ impl FromRequestParts<ServerState> for AuthorisationHeaders {
             "request info contains invalid data",
         ))?;
 
-        let (basic_authz, bearer_token) = if let Some(header) = parts.headers.get(AUTHORIZATION) {
-            if let Some((authz_type, authz_data)) = header
-                .to_str()
-                .map_err(|err| {
-                    warn!(?err, "Invalid authz header, ignoring");
-                })
-                .ok()
-                .and_then(|s| s.split_once(' '))
-            {
-                let authz_type = authz_type.to_lowercase();
+        let (basic_authz, bearer_token_jws, bearer_token_jwe) =
+            if let Some(header) = parts.headers.get(AUTHORIZATION) {
+                if let Some((authz_type, authz_data)) = header
+                    .to_str()
+                    .map_err(|err| {
+                        warn!(?err, "Invalid authz header, ignoring");
+                    })
+                    .ok()
+                    .and_then(|s| s.split_once(' '))
+                {
+                    let authz_type = authz_type.to_lowercase();
 
-                if authz_type == "basic" {
-                    (Some(authz_data.to_string()), None)
-                } else if authz_type == "bearer" {
-                    if let Ok(jwsc) = JwsCompact::from_str(authz_data) {
-                        (None, Some(jwsc))
+                    if authz_type == "basic" {
+                        (Some(authz_data.to_string()), None, None)
+                    } else if authz_type == "bearer" {
+                        if let Ok(jwsc) = JwsCompact::from_str(authz_data) {
+                            (None, Some(jwsc), None)
+                        } else if let Ok(jwec) = JweCompact::from_str(authz_data) {
+                            (None, None, Some(jwec))
+                        } else {
+                            warn!("bearer invalid");
+                            (None, None, None)
+                        }
                     } else {
-                        warn!("bearer jws invalid");
-                        (None, None)
+                        warn!("authorisation header invalid, ignoring");
+                        (None, None, None)
                     }
                 } else {
-                    warn!("authorisation header invalid, ignoring");
-                    (None, None)
+                    (None, None, None)
                 }
             } else {
-                (None, None)
-            }
-        } else {
-            (None, None)
-        };
+                (None, None, None)
+            };
 
         let client_auth_info = ClientAuthInfo::new(
             Source::Https(client_ip_addr),
             client_cert,
-            bearer_token,
+            bearer_token_jws,
+            bearer_token_jwe,
             basic_authz,
         );
 

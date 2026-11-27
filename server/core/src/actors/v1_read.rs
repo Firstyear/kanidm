@@ -1,4 +1,4 @@
-use compact_jwt::{JweCompact, Jwk, JwsCompact};
+use compact_jwt::{JweCompact, Jwk};
 use kanidm_proto::{
     backup::BackupCompression,
     internal::{
@@ -1430,7 +1430,7 @@ impl QueryServerReadV1 {
     pub async fn handle_oauth2_openid_userinfo(
         &self,
         client_id: String,
-        token: &JwsCompact,
+        client_auth_info: &ClientAuthInfo,
         eventid: Uuid,
     ) -> Result<OidcToken, Oauth2Error> {
         let ct = duration_from_epoch_now();
@@ -1439,7 +1439,7 @@ impl QueryServerReadV1 {
             .proxy_read()
             .await
             .map_err(Oauth2Error::ServerError)?;
-        idms_prox_read.oauth2_openid_userinfo(&client_id, token, ct)
+        idms_prox_read.oauth2_openid_userinfo(&client_id, client_auth_info, ct)
     }
 
     #[instrument(

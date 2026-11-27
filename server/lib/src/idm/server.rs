@@ -423,7 +423,8 @@ pub trait IdmServerTransaction<'a> {
         let ClientAuthInfo {
             source,
             client_cert,
-            bearer_token,
+            bearer_token_jws,
+            bearer_token_jwe: _,
             basic_authz: _,
             pre_validated_token,
         } = client_auth_info;
@@ -445,7 +446,7 @@ pub trait IdmServerTransaction<'a> {
             }
         }
 
-        match (client_cert, bearer_token) {
+        match (client_cert, bearer_token_jws) {
             (Some(client_cert_info), _) => {
                 self.client_certificate_to_identity(&client_cert_info, ct, source)
             }
@@ -505,7 +506,7 @@ pub trait IdmServerTransaction<'a> {
 
         match (
             client_auth_info.client_cert.as_ref(),
-            client_auth_info.bearer_token.as_ref(),
+            client_auth_info.bearer_token_jws(),
         ) {
             (Some(client_cert_info), _) => {
                 self.client_certificate_to_user_auth_token(client_cert_info, ct)
@@ -1099,7 +1100,7 @@ pub trait IdmServerTransaction<'a> {
     ) -> Result<Identity, OperationError> {
         // FUTURE: Could allow mTLS here instead?
 
-        let jwsu = client_auth_info.bearer_token.ok_or_else(|| {
+        let jwsu = client_auth_info.bearer_token_jws().ok_or_else(|| {
             security_info!("No token provided");
             OperationError::NotAuthenticated
         })?;
@@ -1107,7 +1108,7 @@ pub trait IdmServerTransaction<'a> {
         let jws_inner = self
             .get_qs_txn()
             .get_domain_key_object_handle()?
-            .jws_verify(&jwsu)
+            .jws_verify(jwsu)
             .map_err(|err| {
                 security_info!(?err, "Unable to verify token");
                 OperationError::NotAuthenticated

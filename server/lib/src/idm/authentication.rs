@@ -2,7 +2,7 @@ use crate::{
     prelude::{OperationError, Url},
     server::identity::Source,
 };
-use compact_jwt::JwsCompact;
+use compact_jwt::{JweCompact, JwsCompact};
 use crypto_glue::{s256::Sha256Output, x509::Certificate};
 use kanidm_proto::{
     internal::UserAuthToken,
@@ -186,7 +186,8 @@ pub(crate) enum PreValidatedTokenStatus {
 pub struct ClientAuthInfo {
     pub(crate) source: Source,
     pub(crate) client_cert: Option<ClientCertInfo>,
-    pub(crate) bearer_token: Option<JwsCompact>,
+    pub(crate) bearer_token_jws: Option<JwsCompact>,
+    pub(crate) bearer_token_jwe: Option<JweCompact>,
     pub(crate) basic_authz: Option<String>,
     pub(crate) pre_validated_token: PreValidatedTokenStatus,
 }
@@ -195,20 +196,26 @@ impl ClientAuthInfo {
     pub fn new(
         source: Source,
         client_cert: Option<ClientCertInfo>,
-        bearer_token: Option<JwsCompact>,
+        bearer_token_jws: Option<JwsCompact>,
+        bearer_token_jwe: Option<JweCompact>,
         basic_authz: Option<String>,
     ) -> Self {
         Self {
             source,
             client_cert,
-            bearer_token,
+            bearer_token_jws,
+            bearer_token_jwe,
             basic_authz,
             pre_validated_token: Default::default(),
         }
     }
 
-    pub fn bearer_token(&self) -> Option<&JwsCompact> {
-        self.bearer_token.as_ref()
+    pub fn bearer_token_jws(&self) -> Option<&JwsCompact> {
+        self.bearer_token_jws.as_ref()
+    }
+
+    pub fn bearer_token_jwe(&self) -> Option<&JweCompact> {
+        self.bearer_token_jwe.as_ref()
     }
 
     pub fn pre_validated_uat(&self) -> Result<&UserAuthToken, OperationError> {
@@ -237,7 +244,8 @@ impl ClientAuthInfo {
         ClientAuthInfo {
             source: Source::Internal,
             client_cert: None,
-            bearer_token: None,
+            bearer_token_jws: None,
+            bearer_token_jwe: None,
             basic_authz: None,
             pre_validated_token: Default::default(),
         }
@@ -250,7 +258,8 @@ impl From<Source> for ClientAuthInfo {
         ClientAuthInfo {
             source: value,
             client_cert: None,
-            bearer_token: None,
+            bearer_token_jws: None,
+            bearer_token_jwe: None,
             basic_authz: None,
             pre_validated_token: Default::default(),
         }
@@ -263,7 +272,22 @@ impl From<JwsCompact> for ClientAuthInfo {
         ClientAuthInfo {
             source: Source::Internal,
             client_cert: None,
-            bearer_token: Some(value),
+            bearer_token_jws: Some(value),
+            bearer_token_jwe: None,
+            basic_authz: None,
+            pre_validated_token: Default::default(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<JweCompact> for ClientAuthInfo {
+    fn from(value: JweCompact) -> ClientAuthInfo {
+        ClientAuthInfo {
+            source: Source::Internal,
+            client_cert: None,
+            bearer_token_jws: None,
+            bearer_token_jwe: Some(value),
             basic_authz: None,
             pre_validated_token: Default::default(),
         }
@@ -276,7 +300,8 @@ impl From<ClientCertInfo> for ClientAuthInfo {
         ClientAuthInfo {
             source: Source::Internal,
             client_cert: Some(value),
-            bearer_token: None,
+            bearer_token_jws: None,
+            bearer_token_jwe: None,
             basic_authz: None,
             pre_validated_token: Default::default(),
         }
@@ -289,7 +314,8 @@ impl From<&str> for ClientAuthInfo {
         ClientAuthInfo {
             source: Source::Internal,
             client_cert: None,
-            bearer_token: None,
+            bearer_token_jws: None,
+            bearer_token_jwe: None,
             basic_authz: Some(value.to_string()),
             pre_validated_token: Default::default(),
         }
@@ -305,7 +331,8 @@ impl ClientAuthInfo {
         ClientAuthInfo {
             source: Source::Internal,
             client_cert: None,
-            bearer_token: None,
+            bearer_token_jws: None,
+            bearer_token_jwe: None,
             basic_authz: Some(value),
             pre_validated_token: Default::default(),
         }

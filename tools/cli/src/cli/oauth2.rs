@@ -507,6 +507,26 @@ impl Oauth2Opt {
                     Err(e) => handle_client_error(e, opt.output_mode),
                 }
             }
+            Oauth2Opt::EnableRfc9068(nopt) => {
+                let client = opt.to_client(OpType::Write).await;
+                match client
+                    .idm_oauth2_rs_enable_rfc9068(nopt.name.as_str())
+                    .await
+                {
+                    Ok(_) => opt.output_mode.print_message("Success"),
+                    Err(e) => handle_client_error(e, opt.output_mode),
+                }
+            }
+            Oauth2Opt::DisableRfc9068(nopt) => {
+                let client = opt.to_client(OpType::Write).await;
+                match client
+                    .idm_oauth2_rs_disable_rfc9068(nopt.name.as_str())
+                    .await
+                {
+                    Ok(_) => opt.output_mode.print_message("Success"),
+                    Err(e) => handle_client_error(e, opt.output_mode),
+                }
+            }
         }
     }
 }

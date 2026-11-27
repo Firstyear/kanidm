@@ -178,6 +178,7 @@ pub const ATTR_OAUTH2_JWT_LEGACY_CRYPTO_ENABLE: &str = "oauth2_jwt_legacy_crypto
 pub const ATTR_OAUTH2_PREFER_SHORT_USERNAME: &str = "oauth2_prefer_short_username";
 pub const ATTR_OAUTH2_REFRESH_TOKEN_EXPIRY: &str = "oauth2_refresh_token_expiry";
 pub const ATTR_OAUTH2_REQUEST_SCOPES: &str = "oauth2_request_scopes";
+pub const ATTR_OAUTH2_RFC9068_TOKENS: &str = "oauth2_rfc9068_tokens";
 pub const ATTR_OAUTH2_RS_BASIC_SECRET: &str = "oauth2_rs_basic_secret";
 pub const ATTR_OAUTH2_RS_CLAIM_MAP: &str = "oauth2_rs_claim_map";
 pub const ATTR_OAUTH2_RS_IMPLICIT_SCOPES: &str = "oauth2_rs_implicit_scopes";
