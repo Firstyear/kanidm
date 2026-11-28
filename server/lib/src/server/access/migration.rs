@@ -60,6 +60,7 @@ pub fn migration_entry_attrs(
     if classes.contains(EntryClass::Group.into()) {
         allow_cls.clear();
         allow_cls.extend([
+            EntryClass::Object.as_ref(),
             EntryClass::Group.as_ref(),
             EntryClass::AccountPolicy.as_ref(),
             EntryClass::PosixGroup.as_ref(),
@@ -76,6 +77,7 @@ pub fn migration_entry_attrs(
     if classes.contains(EntryClass::Person.into()) {
         allow_cls.clear();
         allow_cls.extend([
+            EntryClass::Object.as_ref(),
             EntryClass::Person.as_ref(),
             EntryClass::Account.as_ref(),
             EntryClass::PosixAccount.as_ref(),
@@ -95,6 +97,7 @@ pub fn migration_entry_attrs(
     if classes.contains(EntryClass::ServiceAccount.into()) {
         allow_cls.clear();
         allow_cls.extend([
+            EntryClass::Object.as_ref(),
             EntryClass::Account.as_ref(),
             EntryClass::ServiceAccount.as_ref(),
         ]);
@@ -124,6 +127,7 @@ pub fn migration_entry_attrs(
     if classes.contains(EntryClass::OAuth2ResourceServer.into()) {
         allow_cls.clear();
         allow_cls.extend([
+            EntryClass::Object.as_ref(),
             EntryClass::Account.as_ref(),
             EntryClass::OAuth2ResourceServer.as_ref(),
             EntryClass::OAuth2ResourceServerBasic.as_ref(),
